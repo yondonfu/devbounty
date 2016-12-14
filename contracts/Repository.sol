@@ -22,6 +22,7 @@ contract Repository is usingOraclize {
   uint public minCollateral;
   uint public penaltyNum;
   uint public penaltyDenom;
+  uint public oraclizeGas;
 
   mapping(string => Issue) issues; // issue url => Issue
   mapping(address => uint) public collaterals; // developer address => posted collateral
@@ -32,14 +33,20 @@ contract Repository is usingOraclize {
   enum OraclizeQueryType { OpenPullRequest, MergePullRequest, NoPullRequest }
   OraclizeQueryType oraclizeQueryType;
 
-  function Repository(string _url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom) {
+  event OpenCallbackSuccess(address addr, string result);
+  event OpenCallbackFailed(bytes32 myId, string result);
+  event MergeCallbackSuccess(uint bounty);
+  event MergeCallbackFailed(bytes32 myId, string result);
+
+  function Repository(string _url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0xa0f0f1b1ca09a763f9000c46c3b0baedd099fbdb);
+    OAR = OraclizeAddrResolverI(0xaf1005c8744cee939c1d837382d751918c26afff);
 
     url = _url;
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;
     penaltyDenom = _penaltyDenom;
+    oraclizeGas = _oraclizeGas;
   }
 
   function calcPenalty(uint amount) public constant returns(uint) {
@@ -54,8 +61,8 @@ contract Repository is usingOraclize {
     }
   }
 
-  function getIssueByUrl(string url) public constant returns(string, uint) {
-    return (issues[url].url, issues[url].bounty);
+  function getIssueByUrl(string url) public constant returns(string, uint, bool) {
+    return (issues[url].url, issues[url].bounty, issues[url].initialized);
   }
 
   function registerDev() payable {
@@ -66,10 +73,10 @@ contract Repository is usingOraclize {
 
   function createPullRequest(address addr, string oraclizeResult) {
     var resultSlice = oraclizeResult.toSlice().beyond("[".toSlice()).until("]".toSlice());
-    var url = resultSlice.split(",".toSlice()).toString();
-    var issueUrl = resultSlice.toString();
+    var url = resultSlice.split(",".toSlice()).beyond("\"".toSlice()).until("\"".toSlice()).toString();
+    var issueUrl = resultSlice.beyond(" \"".toSlice()).until("\"".toSlice()).toString();
 
-    if (!issues[issueUrl].initialized) throw; // Issue does not exist
+    if (!issues[issueUrl].initialized) throw;
 
     activePullRequests[addr] = PullRequest(url, issues[issueUrl], true);
   }
@@ -84,7 +91,7 @@ contract Repository is usingOraclize {
     activeDev = msg.sender;
     oraclizeQueryType = OraclizeQueryType.OpenPullRequest;
 
-    oraclize_query('URL', apiUrl); // Client has to provide the constructed api url - json(url).[url, issue_url]
+    oraclizeQuery(apiUrl); // Client has to provide the constructed api url - json(url).[url, issue_url]
   }
 
   function mergePullRequest(string apiUrl) {
@@ -94,7 +101,11 @@ contract Repository is usingOraclize {
     activeDev = msg.sender;
     oraclizeQueryType = OraclizeQueryType.MergePullRequest;
 
-    oraclize_query('URL', apiUrl); // Client has to provide the constructed api url i.e. json(url).merged
+    oraclizeQuery(apiUrl); // Client has to provide the constructed api url i.e. json(url).merged
+  }
+
+  function oraclizeQuery(string apiUrl) {
+    oraclize_query('URL', apiUrl, oraclizeGas);
   }
 
   function __callback(bytes32 myId, string result) {
@@ -104,15 +115,23 @@ contract Repository is usingOraclize {
       if (bytes(result).length == 0) {
         // Invalid pull request
         collaterals[activeDev] -= calcPenalty(collaterals[activeDev]);
+
+        OpenCallbackFailed(myId, result);
       } else {
         createPullRequest(activeDev, result);
+
+        OpenCallbackSuccess(activeDev, result);
       }
     } else if (oraclizeQueryType == OraclizeQueryType.MergePullRequest) {
-      if (strCompare(result, "false") == 0 || !activePullRequests[activeDev].initialized) {
+      if (strCompare(result, "False") == 0 || !activePullRequests[activeDev].initialized) {
         // Pull request not merged or no such open pull request
         collaterals[activeDev] -= calcPenalty(collaterals[activeDev]);
+
+        MergeCallbackFailed(myId, result);
       } else {
         if (!activeDev.send(activePullRequests[activeDev].issue.bounty)) throw;
+
+        MergeCallbackSuccess(activePullRequests[activeDev].issue.bounty);
 
         delete activePullRequests[activeDev];
       }

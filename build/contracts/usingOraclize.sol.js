@@ -349,11 +349,11 @@ var SolidityEvent = require("web3/lib/web3/event.js");
   Contract.all_networks = {
   "default": {
     "abi": [],
-    "unlinked_binary": "0x606060405260088060106000396000f36060604052600256",
+    "unlinked_binary": "0x6060604052346000575b60098060156000396000f360606040525b600056",
     "events": {},
-    "updated_at": 1480693130343,
+    "updated_at": 1481742083365,
     "links": {},
-    "address": "0x9fc3119adcd6816757e492e10b94d8c2901444a4"
+    "address": "0x727a0438969bbcaee57239ba94974002027c1920"
   }
 };
 
