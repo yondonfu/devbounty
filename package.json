@@ -1,0 +1,27 @@
+{
+  "name": "devbounty",
+  "version": "1.0.0",
+  "description": "Ethereum smart contracts for rewarding open source contributions.",
+  "main": "truffle.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/yondonfu/devbounty.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/yondonfu/devbounty/issues"
+  },
+  "homepage": "https://github.com/yondonfu/devbounty#readme",
+  "dependencies": {
+    "babel-preset-es2015": "^6.18.0",
+    "babel-preset-stage-2": "^6.18.0",
+    "babel-preset-stage-3": "^6.17.0"
+  }
+}

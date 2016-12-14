@@ -74,6 +74,10 @@ contract Repository is usingOraclize {
     activePullRequests[addr] = PullRequest(url, issues[issueUrl], true);
   }
 
+  function getPullRequestByAddr(address addr) public constant returns(string, string) {
+    return (activePullRequests[addr].url, activePullRequests[addr].issue.url);
+  }
+
   function openPullRequest(string apiUrl) {
     if (collaterals[msg.sender] == 0) throw; // Not registered developer address
 
