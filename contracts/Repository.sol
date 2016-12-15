@@ -26,6 +26,7 @@ contract Repository is usingOraclize {
 
   mapping(string => Issue) issues; // issue url => Issue
   mapping(address => uint) public collaterals; // developer address => posted collateral
+  mapping(address => uint) public claimableBounties; // developer address => claimable bounty amount
   mapping(address => PullRequest) activePullRequests; // developer address => PullRequest
 
   address activeDev;
@@ -40,7 +41,7 @@ contract Repository is usingOraclize {
 
   function Repository(string _url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0xaf1005c8744cee939c1d837382d751918c26afff);
+    OAR = OraclizeAddrResolverI(0x7069becf509f4a8c25308f9cc3ba7817f9381381);
 
     url = _url;
     minCollateral = _minCollateral;
@@ -65,12 +66,6 @@ contract Repository is usingOraclize {
     return (issues[url].url, issues[url].bounty, issues[url].initialized);
   }
 
-  function registerDev() payable {
-    if (msg.value < minCollateral) throw; // Insufficient collateral
-
-    collaterals[msg.sender] = msg.value;
-  }
-
   function createPullRequest(address addr, string oraclizeResult) {
     var resultSlice = oraclizeResult.toSlice().beyond("[".toSlice()).until("]".toSlice());
     var url = resultSlice.split(",".toSlice()).beyond("\"".toSlice()).until("\"".toSlice()).toString();
@@ -85,13 +80,19 @@ contract Repository is usingOraclize {
     return (activePullRequests[addr].url, activePullRequests[addr].issue.url);
   }
 
-  function openPullRequest(string apiUrl) {
-    if (collaterals[msg.sender] == 0) throw; // Not registered developer address
+  function openPullRequest(string apiUrl) payable {
+    collaterals[msg.sender] = msg.value;
 
     activeDev = msg.sender;
     oraclizeQueryType = OraclizeQueryType.OpenPullRequest;
 
+    uint initialBalance = this.balance;
+
     oraclizeQuery(apiUrl); // Client has to provide the constructed api url - json(url).[url, issue_url]
+
+    uint updatedBalance = this.balance;
+    uint balanceDiff = initialBalance - updatedBalance;
+    collaterals[msg.sender] -= balanceDiff;
   }
 
   function mergePullRequest(string apiUrl) {
@@ -101,7 +102,13 @@ contract Repository is usingOraclize {
     activeDev = msg.sender;
     oraclizeQueryType = OraclizeQueryType.MergePullRequest;
 
+    uint initialBalance = this.balance;
+
     oraclizeQuery(apiUrl); // Client has to provide the constructed api url i.e. json(url).merged
+
+    uint updatedBalance = this.balance;
+    uint balanceDiff = initialBalance - updatedBalance;
+    collaterals[msg.sender] -= balanceDiff;
   }
 
   function oraclizeQuery(string apiUrl) {
@@ -129,7 +136,7 @@ contract Repository is usingOraclize {
 
         MergeCallbackFailed(myId, result);
       } else {
-        if (!activeDev.send(activePullRequests[activeDev].issue.bounty)) throw;
+        claimableBounties[activeDev] += activePullRequests[activeDev].issue.bounty;
 
         MergeCallbackSuccess(activePullRequests[activeDev].issue.bounty);
 
@@ -140,7 +147,24 @@ contract Repository is usingOraclize {
       throw;
     }
 
+    oraclizeQueryType = OraclizeQueryType.NoPullRequest;
     activeDev = 0x0;
+  }
+
+  function claimPayment() external {
+    uint bounty = claimableBounties[msg.sender];
+    uint collateral = collaterals[msg.sender];
+    uint payment = bounty + collateral;
+
+    if (payment == 0) throw;
+    if (this.balance < payment) throw;
+
+    claimableBounties[msg.sender] = 0;
+    collaterals[msg.sender] = 0;
+    if (!msg.sender.send(payment)) {
+      claimableBounties[msg.sender] = bounty;
+      collaterals[msg.sender] = collateral;
+    }
   }
 
 }

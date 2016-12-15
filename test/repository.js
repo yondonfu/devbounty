@@ -48,25 +48,9 @@ contract('Repository', function(accounts) {
     assert.equal(updatedAmount, issue2[1], 'issue should have the correct bounty');
   });
 
-  it('should register a developer address', async function() {
+  it('should open and merge a pull request and claim payment', async function() {
     const repoUrl = 'https://github.com/foo/bar';
-    const minCollateral = web3.toBigNumber(web3.toWei(1, 'ether')).toNumber();
-    const penaltyNum = 15;
-    const penaltyDenom = 100;
-    const oraclizeGas = 250000;
-
-    let repo = await Repository.new(repoUrl, minCollateral, penaltyNum, penaltyDenom, {from:accounts[0]});
-
-    const postedCollateral = web3.toBigNumber(web3.toWei(1, 'ether')).toNumber();
-
-    await repo.registerDev({from: accounts[1], value: postedCollateral});
-    let collateral = await repo.collaterals.call(accounts[1]);
-    assert.equal(collateral, postedCollateral, 'stored collaterals hould match posted collateral');
-  });
-
-  it('should open and merge a pull request', async function() {
-    const repoUrl = 'https://github.com/foo/bar';
-    const minCollateral = web3.toBigNumber(web3.toWei(1, 'ether')).toNumber();
+    const minCollateral = web3.toWei(1, 'ether');
     const penaltyNum = 15;
     const penaltyDenom = 100;
     const oraclizeGas = 250000;
@@ -77,10 +61,6 @@ contract('Repository', function(accounts) {
     const amount = web3.toWei(1, 'ether');
 
     await repo.fundIssue(issueUrl, {from: accounts[1], value: amount});
-
-    const postedCollateral = web3.toBigNumber(web3.toWei(1, 'ether')).toNumber();
-
-    await repo.registerDev({from: accounts[2], value: postedCollateral});
 
     const openApiUrl = 'json(https://api.github.com/repos/ConsenSys/truffle/pulls/277).[url, issue_url]';
     const mergeApiUrl = 'json(https://api.github.com/repos/ConsenSys/truffle/pulls/277).merged';
@@ -106,12 +86,22 @@ contract('Repository', function(accounts) {
         let pullRequest = await repo.getPullRequestByAddr(accounts[2], {from: accounts[2]});
         assert.equal('', pullRequest[0], 'pull request should have zeroed out url');
         assert.equal('', pullRequest[1], 'pull request should have zeroed out issue url');
+
+        const initialBalance = web3.eth.getBalance(repo.address);
+        let updatedCollateral = await repo.collaterals.call(accounts[2]);
+
+        await repo.claimPayment({from: accounts[2]});
+        const updatedBalance = web3.eth.getBalance(repo.address);
+        const balanceDiff = initialBalance.minus(updatedBalance).toNumber();
+        const payment = web3.toBigNumber(amount).toNumber() + updatedCollateral.toNumber();
+        assert.equal(payment, balanceDiff, 'claimed payment should be sum of collateral and bounty');
       });
 
       await repo.mergePullRequest(mergeApiUrl, {from: accounts[2]});
     });
 
-    await repo.openPullRequest(openApiUrl, {from: accounts[2]});
+    const postedCollateral = web3.toWei(1, 'ether');
+    await repo.openPullRequest(openApiUrl, {from: accounts[2], value: postedCollateral});
 
   });
 
