@@ -30,13 +30,14 @@ contract Repository is usingOraclize {
   mapping(address => PullRequest) activePullRequests; // developer address => PullRequest
 
   address activeDev;
+  string activePullRequestUrl;
 
   enum OraclizeQueryType { OpenPullRequest, MergePullRequest, NoPullRequest }
   OraclizeQueryType oraclizeQueryType;
 
-  event OpenCallbackSuccess(address addr, string result);
+  event OpenCallbackSuccess(bytes32 myId, string result);
   event OpenCallbackFailed(bytes32 myId, string result);
-  event MergeCallbackSuccess(uint bounty);
+  event MergeCallbackSuccess(bytes32 myId, string result);
   event MergeCallbackFailed(bytes32 myId, string result);
 
   function Repository(string _url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
@@ -66,40 +67,58 @@ contract Repository is usingOraclize {
     return (issues[url].url, issues[url].bounty, issues[url].initialized);
   }
 
-  function createPullRequest(address addr, string oraclizeResult) {
+  function createPullRequest(address addr, string, prUrl, string oraclizeResult) returns(bool) {
+    if (bytes(oraclizeResult).length == 0) return false;
+
     var resultSlice = oraclizeResult.toSlice().beyond("[".toSlice()).until("]".toSlice());
-    var url = resultSlice.split(",".toSlice()).beyond("\"".toSlice()).until("\"".toSlice()).toString();
-    var issueUrl = resultSlice.beyond(" \"".toSlice()).until("\"".toSlice()).toString();
+    var issueUrl = resultSlice.split(",".toSlice()).beyond(" \"".toSlice()).until("\"".toSlice()).toString();
+    var body = resultSlice.beyond(" \"".toSlice()).until("\"".toSlice()).toString();
 
-    if (!issues[issueUrl].initialized) throw;
+    if (!issues[issueUrl].initialized) return false;
+    if (!checkPullRequestAddr(addr, body)) return false;
 
-    activePullRequests[addr] = PullRequest(url, issues[issueUrl], true);
+    activePullRequests[addr] = PullRequest(prUrl, issues[issueUrl], true);
+
+    return true;
+  }
+
+  function checkPullRequestAddr(address addr, string pullRequestBody) returns(bool) {
+    var strAddr = pullRequestBody.toSlice().split("\n".toSlice()).toString();
+    var pullRequestAddr = parseAddr(strAddr);
+
+    if (pullRequestAddr == addr) {
+      return true;
+    } else {
+      return false;
+    }
   }
 
   function getPullRequestByAddr(address addr) public constant returns(string, string) {
     return (activePullRequests[addr].url, activePullRequests[addr].issue.url);
   }
 
-  function openPullRequest(string apiUrl) payable {
+  function openPullRequest(string apiUrl, string prUrl) payable {
     collaterals[msg.sender] = msg.value;
 
     activeDev = msg.sender;
+    activePullRequestUrl = prUrl;
     oraclizeQueryType = OraclizeQueryType.OpenPullRequest;
 
     uint initialBalance = this.balance;
 
-    oraclizeQuery(apiUrl); // Client has to provide the constructed api url - json(url).[url, issue_url]
+    oraclizeQuery(apiUrl); // Client has to provide the constructed api url - json(url).[issue_url, body]
 
     uint updatedBalance = this.balance;
     uint balanceDiff = initialBalance - updatedBalance;
     collaterals[msg.sender] -= balanceDiff;
   }
 
-  function mergePullRequest(string apiUrl) {
+  function mergePullRequest(string apiUrl, string prUrl) {
     if (collaterals[msg.sender] == 0) throw; // Not registered developer address
     if (!activePullRequests[msg.sender].initialized) throw; // Developer has not opened a pull request
 
     activeDev = msg.sender;
+    activePullRequestUrl = prUrl;
     oraclizeQueryType = OraclizeQueryType.MergePullRequest;
 
     uint initialBalance = this.balance;
@@ -119,15 +138,13 @@ contract Repository is usingOraclize {
     if (msg.sender != oraclize_cbAddress()) throw; // Non-oraclize message
 
     if (oraclizeQueryType == OraclizeQueryType.OpenPullRequest) {
-      if (bytes(result).length == 0) {
+      if (!createPullRequest(activeDev, result)) {
         // Invalid pull request
         collaterals[activeDev] -= calcPenalty(collaterals[activeDev]);
 
         OpenCallbackFailed(myId, result);
       } else {
-        createPullRequest(activeDev, result);
-
-        OpenCallbackSuccess(activeDev, result);
+        OpenCallbackSuccess(myId, result);
       }
     } else if (oraclizeQueryType == OraclizeQueryType.MergePullRequest) {
       if (strCompare(result, "False") == 0 || !activePullRequests[activeDev].initialized) {
@@ -138,7 +155,7 @@ contract Repository is usingOraclize {
       } else {
         claimableBounties[activeDev] += activePullRequests[activeDev].issue.bounty;
 
-        MergeCallbackSuccess(activePullRequests[activeDev].issue.bounty);
+        MergeCallbackSuccess(myId, result);
 
         delete activePullRequests[activeDev];
       }
@@ -149,6 +166,7 @@ contract Repository is usingOraclize {
 
     oraclizeQueryType = OraclizeQueryType.NoPullRequest;
     activeDev = 0x0;
+    activePullRequestUrl = '';
   }
 
   function claimPayment() external {

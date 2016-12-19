@@ -1,7 +1,7 @@
 const timeout = require('./helpers/timeout');
 
 contract('Repository', function(accounts) {
-  it('should match initial contract settings', async function() {
+ l it('should match initial contract settings', async function() {
     const repoUrl = 'https://github.com/foo/bar';
     const minCollateral = web3.toBigNumber(web3.toWei(1, 'ether')).toNumber();
     const penaltyNum = 15;
@@ -97,12 +97,13 @@ contract('Repository', function(accounts) {
         assert.equal(payment, balanceDiff, 'claimed payment should be sum of collateral and bounty');
       });
 
-      await repo.mergePullRequest(mergeApiUrl, {from: accounts[2]});
+      await repo.mergePullRequest(mergeApiUrl, prUrl, {from: accounts[2]});
     });
 
     const postedCollateral = web3.toWei(1, 'ether');
-    await repo.openPullRequest(openApiUrl, {from: accounts[2], value: postedCollateral});
+    await repo.openPullRequest(openApiUrl, prUrl, {from: accounts[2], value: postedCollateral});
 
   });
 
 });
+l

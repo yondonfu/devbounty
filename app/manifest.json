@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+
+  "name": "DevBounty",
+  "description": "Integrated with Github to post and claim issue bounties",
+  "version": "1.0",
+  "content_scripts": [
+    {
+      "matches": ["*://github.com/*/*/issues/*"],
+      "css": ["stylesheets/issue.css"],
+      "js": ["javascripts/issue.js"]
+    },
+    {
+      "matches": ["*://github.com/*/*/pull/*"],
+      "css": ["stylesheets/pullrequest.css"],
+      "js": ["javascripts/pullrequest.js"]
+    }
+  ],
+
+  "background": {
+    "scripts": ["javascripts/background.js"]
+  },
+
+  "browser_action": {
+    "default_icon": "images/icon.png"
+  },
+
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "webNavigation",
+    "https://ajax.googleapis.com/",
+    "https://github.com/*"
+  ],
+
+  "web_accessible_resources": [
+    "images/*",
+    "javascripts/*",
+    "stylesheets/*"
+  ]
+}
