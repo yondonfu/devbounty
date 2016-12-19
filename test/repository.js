@@ -1,7 +1,7 @@
 const timeout = require('./helpers/timeout');
 
 contract('Repository', function(accounts) {
- l it('should match initial contract settings', async function() {
+  it('should match initial contract settings', async function() {
     const repoUrl = 'https://github.com/foo/bar';
     const minCollateral = web3.toBigNumber(web3.toWei(1, 'ether')).toNumber();
     const penaltyNum = 15;
@@ -49,22 +49,22 @@ contract('Repository', function(accounts) {
   });
 
   it('should open and merge a pull request and claim payment', async function() {
-    const repoUrl = 'https://github.com/foo/bar';
+    const repoUrl = 'https://github.com/yondonfu/devbounty';
     const minCollateral = web3.toWei(1, 'ether');
     const penaltyNum = 15;
     const penaltyDenom = 100;
-    const oraclizeGas = 250000;
+    const oraclizeGas = 400000;
 
     let repo = await Repository.new(repoUrl, minCollateral, penaltyNum, penaltyDenom, oraclizeGas, {from:accounts[0]});
 
-    const issueUrl = 'https://api.github.com/repos/ConsenSys/truffle/issues/277';
+    const issueUrl = 'https://api.github.com/repos/yondonfu/devbounty/issues/1';
     const amount = web3.toWei(1, 'ether');
 
     await repo.fundIssue(issueUrl, {from: accounts[1], value: amount});
 
-    const openApiUrl = 'json(https://api.github.com/repos/ConsenSys/truffle/pulls/277).[url, issue_url]';
-    const mergeApiUrl = 'json(https://api.github.com/repos/ConsenSys/truffle/pulls/277).merged';
-    const prUrl = 'https://api.github.com/repos/ConsenSys/truffle/pulls/277';
+    const openApiUrl = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).[issue_url, body]';
+    const mergeApiUrl = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).merged';
+    const prUrl = 'https://api.github.com/repos/yondonfu/devbounty/pulls/1';
     const initialBalance = web3.eth.getBalance(repo.address);
 
     let openEvent = repo.OpenCallbackSuccess({});
@@ -73,7 +73,7 @@ contract('Repository', function(accounts) {
       openEvent.stopWatching();
       if (err) { throw err; }
 
-      let pullRequest = await repo.getPullRequestByAddr(accounts[2], {from: accounts[2]});
+      let pullRequest = await repo.getPullRequestByAddr(accounts[9], {from: accounts[9]});
       assert.equal(prUrl, pullRequest[0], 'pull request should have the correct url');
       assert.equal(issueUrl, pullRequest[1], 'pull request should have the correct issue url');
 
@@ -83,27 +83,26 @@ contract('Repository', function(accounts) {
         mergeEvent.stopWatching();
         if (err) { throw err; }
 
-        let pullRequest = await repo.getPullRequestByAddr(accounts[2], {from: accounts[2]});
+        let pullRequest = await repo.getPullRequestByAddr(accounts[9], {from: accounts[9]});
         assert.equal('', pullRequest[0], 'pull request should have zeroed out url');
         assert.equal('', pullRequest[1], 'pull request should have zeroed out issue url');
 
         const initialBalance = web3.eth.getBalance(repo.address);
-        let updatedCollateral = await repo.collaterals.call(accounts[2]);
+        let updatedCollateral = await repo.collaterals.call(accounts[9]);
 
-        await repo.claimPayment({from: accounts[2]});
+        await repo.claimPayment({from: accounts[9]});
         const updatedBalance = web3.eth.getBalance(repo.address);
         const balanceDiff = initialBalance.minus(updatedBalance).toNumber();
         const payment = web3.toBigNumber(amount).toNumber() + updatedCollateral.toNumber();
         assert.equal(payment, balanceDiff, 'claimed payment should be sum of collateral and bounty');
       });
 
-      await repo.mergePullRequest(mergeApiUrl, prUrl, {from: accounts[2]});
+      await repo.mergePullRequest(mergeApiUrl, prUrl, {from: accounts[9]});
     });
 
     const postedCollateral = web3.toWei(1, 'ether');
-    await repo.openPullRequest(openApiUrl, prUrl, {from: accounts[2], value: postedCollateral});
+    await repo.openPullRequest(openApiUrl, prUrl, {from: accounts[9], value: postedCollateral});
 
   });
 
 });
-l

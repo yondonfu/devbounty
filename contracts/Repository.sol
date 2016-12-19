@@ -42,7 +42,7 @@ contract Repository is usingOraclize {
 
   function Repository(string _url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0x7069becf509f4a8c25308f9cc3ba7817f9381381);
+    OAR = OraclizeAddrResolverI(0x7b5f554ac4274b59f35ad6b832829453cde5ecee);
 
     url = _url;
     minCollateral = _minCollateral;
@@ -67,11 +67,11 @@ contract Repository is usingOraclize {
     return (issues[url].url, issues[url].bounty, issues[url].initialized);
   }
 
-  function createPullRequest(address addr, string, prUrl, string oraclizeResult) returns(bool) {
+  function createPullRequest(address addr, string prUrl, string oraclizeResult) returns(bool) {
     if (bytes(oraclizeResult).length == 0) return false;
 
     var resultSlice = oraclizeResult.toSlice().beyond("[".toSlice()).until("]".toSlice());
-    var issueUrl = resultSlice.split(",".toSlice()).beyond(" \"".toSlice()).until("\"".toSlice()).toString();
+    var issueUrl = resultSlice.split(",".toSlice()).beyond("\"".toSlice()).until("\"".toSlice()).toString();
     var body = resultSlice.beyond(" \"".toSlice()).until("\"".toSlice()).toString();
 
     if (!issues[issueUrl].initialized) return false;
@@ -83,7 +83,7 @@ contract Repository is usingOraclize {
   }
 
   function checkPullRequestAddr(address addr, string pullRequestBody) returns(bool) {
-    var strAddr = pullRequestBody.toSlice().split("\n".toSlice()).toString();
+    var strAddr = pullRequestBody.toSlice().split("\n".toSlice()).until("\r".toSlice()).toString();
     var pullRequestAddr = parseAddr(strAddr);
 
     if (pullRequestAddr == addr) {
@@ -138,7 +138,7 @@ contract Repository is usingOraclize {
     if (msg.sender != oraclize_cbAddress()) throw; // Non-oraclize message
 
     if (oraclizeQueryType == OraclizeQueryType.OpenPullRequest) {
-      if (!createPullRequest(activeDev, result)) {
+      if (!createPullRequest(activeDev, activePullRequestUrl, result)) {
         // Invalid pull request
         collaterals[activeDev] -= calcPenalty(collaterals[activeDev]);
 
@@ -147,7 +147,7 @@ contract Repository is usingOraclize {
         OpenCallbackSuccess(myId, result);
       }
     } else if (oraclizeQueryType == OraclizeQueryType.MergePullRequest) {
-      if (strCompare(result, "False") == 0 || !activePullRequests[activeDev].initialized) {
+      if (bytes(result).length == 0 || strCompare(result, "False") == 0 || !activePullRequests[activeDev].initialized) {
         // Pull request not merged or no such open pull request
         collaterals[activeDev] -= calcPenalty(collaterals[activeDev]);
 
