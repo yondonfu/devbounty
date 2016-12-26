@@ -1,7 +1,6 @@
 console.log('Issue script loaded!');
 
 window.onload = function() {
-  var web3 = require('web3');
   console.log(web3);
 }
 
