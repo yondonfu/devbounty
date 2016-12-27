@@ -1,9 +1,5 @@
 console.log('Issue script loaded!');
 
-window.onload = function() {
-  console.log(web3);
-}
-
 var headerActions = document.getElementsByClassName('gh-header-actions')[0];
 
 var postBountyBtn = document.createElement('button');
@@ -16,6 +12,12 @@ postBountyBtn.addEventListener('click', function() {
   var issueUrl = window.location.href;
   var issuePath = issueUrl.substring(githubRoot.length);
   var apiUrl = apiGithubRoot + issuePath;
+
+  if (web3 == undefined) {
+    console.log("metamask is installed");
+  } else {
+    console.log("metamask installed");
+  }
 
   alert(apiUrl);
 });
