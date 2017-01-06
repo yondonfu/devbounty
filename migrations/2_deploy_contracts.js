@@ -1,4 +1,4 @@
 module.exports = function(deployer) {
   deployer.deploy(usingOraclize);
-  deployer.deploy(Repository);
+  deployer.deploy(DevBounty);
 };

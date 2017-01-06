@@ -3,7 +3,7 @@ pragma solidity ^0.4.6;
 import "usingOraclize.sol";
 import "strings.sol";
 
-contract Repository is usingOraclize {
+contract DevBounty is usingOraclize {
   using strings for *;
 
   struct Issue {
@@ -24,7 +24,6 @@ contract Repository is usingOraclize {
     OraclizeQueryType queryType;
   }
 
-  string public url;
   uint public minCollateral;
   uint public penaltyNum;
   uint public penaltyDenom;
@@ -45,11 +44,10 @@ contract Repository is usingOraclize {
   event MergeCallbackSuccess(address dev, uint updatedClaimableBounty);
   event MergeCallbackFailed(address dev, uint updatedCollateral);
 
-  function Repository(string _url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
+  function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0x07008c7fb54e402ea33a490858e52bbc966e4b65);
+    OAR = OraclizeAddrResolverI(0xd1e765da435b5864501a0ba747cdb6f1b77b1d74);
 
-    url = _url;
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;
     penaltyDenom = _penaltyDenom;
