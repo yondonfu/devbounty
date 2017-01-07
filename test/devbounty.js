@@ -28,19 +28,28 @@ contract('DevBounty', function(accounts) {
     let c = await DevBounty.new(minCollateral, penaltyNum, penaltyDenom, oraclizeGas, {from: accounts[0]});
 
     const issueUrl = 'https://api.github.com/repos/foo/bar/issues/1';
+    const issueJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/issues/1).url';
     const amount = web3.toWei(1, 'ether');
 
-    await c.fundIssue(issueUrl, {from: accounts[1], value: amount});
-    let issue1 = await c.getIssueByUrl(issueUrl);
-    assert.equal(issueUrl, issue1[0], 'issue should have the correct url');
-    assert.equal(amount, issue1[1], 'issue should have the correct bounty');
-    assert.equal(true, issue1[2], 'issue should be initialized');
+    let fundIssueEvent = c.FundIssueCallbackSuccess({});
 
-    const updatedAmount = web3.toWei(2, 'ether');
+    fundIssueEvent.watch(async function(err, result) {
+      fundIssueEvent.stopWatching();
+      if (err) { throw err; }
 
-    await c.fundIssue(issueUrl, {from: accounts[2], value: amount});
-    let issue2 = await c.getIssueByUrl(issueUrl);
-    assert.equal(updatedAmount, issue2[1], 'issue should have the correct bounty');
+      let issue1 = await c.getIssueByUrl(issueUrl);
+      assert.equal(issueUrl, issue1[0], 'issue should have the correct url');
+      assert.equal(result.args.updatedBounty.toNumber(), issue1[1].toNumber(), 'issue should have the correct bounty');
+      assert.equal(true, issue1[2], 'issue should be initialized');
+
+      await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[2], value: amount});
+      const updatedAmount = result.args.updatedBounty.plus(web3.toBigNumber(amount));
+
+      let issue2 = await c.getIssueByUrl(issueUrl);
+      assert.equal(updatedAmount.toNumber(), issue2[1].toNumber(), 'issue should have the correct bounty');
+    });
+
+    await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[1], value: amount});
   });
 
   it('should open and merge a pull request and claim payment', async function() {
@@ -52,50 +61,56 @@ contract('DevBounty', function(accounts) {
     let c = await DevBounty.new(minCollateral, penaltyNum, penaltyDenom, oraclizeGas, {from:accounts[0]});
 
     const issueUrl = 'https://api.github.com/repos/yondonfu/devbounty/issues/1';
+    const issueJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/issues/1).url';
     const amount = web3.toWei(1, 'ether');
 
-    await c.fundIssue(issueUrl, {from: accounts[1], value: amount});
+    let fundIssueEvent = c.FundIssueCallbackSuccess({});
 
-    const openApiUrl = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).[issue_url, body]';
-    const mergeApiUrl = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).merged';
-    const prUrl = 'https://api.github.com/repos/yondonfu/devbounty/pulls/1';
-    const initialBalance = web3.eth.getBalance(c.address);
-
-    let openEvent = c.OpenCallbackSuccess({});
-
-    openEvent.watch(async function(err, result) {
-      openEvent.stopWatching();
+    fundIssueEvent.watch(async function(err, result) {
+      fundIssueEvent.stopWatching();
       if (err) { throw err; }
 
-      let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
-      assert.equal(prUrl, pullRequest[0], 'pull request should have the correct url');
-      assert.equal(issueUrl, pullRequest[1], 'pull request should have the correct issue url');
+      const issueBounty = result.args.updatedBounty;
 
-      let mergeEvent = c.MergeCallbackSuccess({});
+      const prUrl = 'https://api.github.com/repos/yondonfu/devbounty/pulls/1';
+      const openJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).[issue_url, body]';
+      const mergeJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).merged';
 
-      mergeEvent.watch(async function(err, result) {
-        mergeEvent.stopWatching();
+      let openEvent = c.OpenCallbackSuccess({});
+
+      openEvent.watch(async function(err, result) {
+        openEvent.stopWatching();
         if (err) { throw err; }
 
         let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
-        assert.equal('', pullRequest[0], 'pull request should have zeroed out url');
-        assert.equal('', pullRequest[1], 'pull request should have zeroed out issue url');
+        assert.equal(prUrl, pullRequest[0], 'pull request should have the correct url');
+        assert.equal(issueUrl, pullRequest[1], 'pull request should have the correct issue url');
 
-        const initialBalance = web3.eth.getBalance(c.address);
-        let updatedCollateral = await c.collaterals.call(accounts[9]);
+        let mergeEvent = c.MergeCallbackSuccess({});
 
-        await c.claimPayment({from: accounts[9]});
-        const updatedBalance = web3.eth.getBalance(c.address);
-        const balanceDiff = initialBalance.minus(updatedBalance).toNumber();
-        const payment = web3.toBigNumber(amount).toNumber() + updatedCollateral.toNumber();
-        assert.equal(payment, balanceDiff, 'claimed payment should be sum of collateral and bounty');
+        mergeEvent.watch(async function(err, result) {
+          mergeEvent.stopWatching();
+          if (err) { throw err; }
+
+          let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
+          assert.equal('', pullRequest[0], 'pull request should have zeroed out url');
+          assert.equal('', pullRequest[1], 'pull request should have zeroed out issue url');
+
+          assert.equal(result.args.updatedClaimableBounty.toNumber(), issueBounty.toNumber(), 'claimable bounty should match issue bounty');
+
+          // await c.claimPayment({from: accounts[9]});
+
+        });
+
+        await c.mergePullRequest(prUrl, mergeJsonHelper, {from: accounts[9]});
       });
 
-      await c.mergePullRequest(mergeApiUrl, prUrl, {from: accounts[9]});
+      const postedCollateral = web3.toWei(1, 'ether');
+      await c.openPullRequest(prUrl, openJsonHelper, {from: accounts[9], value: postedCollateral});
+
     });
 
-    const postedCollateral = web3.toWei(1, 'ether');
-    await c.openPullRequest(openApiUrl, prUrl, {from: accounts[9], value: postedCollateral});
+    await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[1], value: amount});
 
   });
 

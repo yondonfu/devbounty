@@ -20,7 +20,8 @@ contract DevBounty is usingOraclize {
 
   struct OraclizeCallback {
     address dev;
-    string prUrl;
+    string url;
+    uint value;
     OraclizeQueryType queryType;
   }
 
@@ -30,23 +31,25 @@ contract DevBounty is usingOraclize {
   uint public oraclizeGas;
 
   mapping(string => Issue) issues; // issue url => Issue
+  mapping(address => PullRequest) activePullRequests; // developer address => PullRequest
   mapping(address => uint) public collaterals; // developer address => posted collateral
   mapping(address => uint) public claimableBounties; // developer address => claimable bounty amount
-  mapping(address => PullRequest) activePullRequests; // developer address => PullRequest
 
-  enum OraclizeQueryType { OpenPullRequest, MergePullRequest, NoPullRequest }
+  enum OraclizeQueryType { OpenPullRequest, MergePullRequest, FundIssue, NullQuery }
   OraclizeQueryType oraclizeQueryType;
 
   mapping(bytes32 => OraclizeCallback) public oraclizeCallbacks;
 
-  event OpenCallbackSuccess(address dev, string prUrl);
+  event OpenCallbackSuccess(address dev, string url);
   event OpenCallbackFailed(address dev, uint updatedCollateral);
   event MergeCallbackSuccess(address dev, uint updatedClaimableBounty);
   event MergeCallbackFailed(address dev, uint updatedCollateral);
+  event FundIssueCallbackSuccess(address dev, string url, uint updatedBounty);
+  event FundIssueCallbackFailed(address dev, string url);
 
   function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0xd1e765da435b5864501a0ba747cdb6f1b77b1d74);
+    OAR = OraclizeAddrResolverI(0x21ab2580dbe1d1ce15cf31ee5ca7f980add548f3);
 
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;
@@ -58,10 +61,19 @@ contract DevBounty is usingOraclize {
     return (amount * penaltyNum) / penaltyDenom;
   }
 
-  function fundIssue(string url) payable {
+  function fundIssue(string url, string jsonHelper) payable {
     if (!issues[url].initialized) {
-      issues[url] = Issue(url, msg.value, true);
+      uint initialBalance = this.balance;
+
+      // Need to verify that the issue exists
+      bytes32 queryId = oraclizeQuery(jsonHelper); // Client has to provide the constructed json helper - json(url).url
+
+      uint updatedBalance = this.balance;
+      uint oraclizeFee = initialBalance - updatedBalance;
+
+      oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, msg.value - oraclizeFee, OraclizeQueryType.FundIssue);
     } else {
+      // Already know the issue exists so we do not need an oraclize query
       issues[url].bounty += msg.value;
     }
   }
@@ -70,35 +82,37 @@ contract DevBounty is usingOraclize {
     return (issues[url].url, issues[url].bounty, issues[url].initialized);
   }
 
-  function openPullRequest(string apiUrl, string prUrl) payable {
+  function openPullRequest(string url, string jsonHelper) payable {
     collaterals[msg.sender] = msg.value;
 
     uint initialBalance = this.balance;
 
-    bytes32 queryId = oraclizeQuery(apiUrl); // Client has to provide the constructed api url - json(url).[issue_url, body]
-    oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, prUrl, OraclizeQueryType.OpenPullRequest);
+    bytes32 queryId = oraclizeQuery(jsonHelper); // Client has to provide the constructed jsonHelper - json(url).[issue_url, body]
 
     uint updatedBalance = this.balance;
-    uint balanceDiff = initialBalance - updatedBalance;
-    collaterals[msg.sender] -= balanceDiff;
+    uint oraclizeFee = initialBalance - updatedBalance;
+    collaterals[msg.sender] -= oraclizeFee;
+
+    oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, 0, OraclizeQueryType.OpenPullRequest);
   }
 
-  function mergePullRequest(string apiUrl, string prUrl) {
+  function mergePullRequest(string url, string jsonHelper) {
     if (collaterals[msg.sender] == 0) throw; // Not registered developer address
     if (!activePullRequests[msg.sender].initialized) throw; // Developer has not opened a pull request
 
     uint initialBalance = this.balance;
 
-    bytes32 queryId = oraclizeQuery(apiUrl); // Client has to provide the constructed api url i.e. json(url).merged
-    oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, prUrl, OraclizeQueryType.MergePullRequest);
+    bytes32 queryId = oraclizeQuery(jsonHelper); // Client has to provide the constructed jsonHelper i.e. json(url).merged
 
     uint updatedBalance = this.balance;
-    uint balanceDiff = initialBalance - updatedBalance;
-    collaterals[msg.sender] -= balanceDiff;
-  }
+    uint oraclizeFee = initialBalance - updatedBalance;
+    collaterals[msg.sender] -= oraclizeFee;
 
-  function oraclizeQuery(string apiUrl) returns(bytes32) {
-    return oraclize_query('URL', apiUrl, oraclizeGas);
+    oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, 0, OraclizeQueryType.MergePullRequest);
+ }
+
+  function oraclizeQuery(string jsonHelper) returns(bytes32) {
+    return oraclize_query('URL', jsonHelper, oraclizeGas);
   }
 
   function __callback(bytes32 myId, string result) {
@@ -107,23 +121,25 @@ contract DevBounty is usingOraclize {
     OraclizeCallback memory c = oraclizeCallbacks[myId];
 
     if (c.queryType == OraclizeQueryType.OpenPullRequest) {
-      openCallback(c.dev, c.prUrl, result);
+      openCallback(c.dev, c.url, result);
     } else if (c.queryType == OraclizeQueryType.MergePullRequest) {
       mergeCallback(c.dev, result);
+    } else if (c.queryType == OraclizeQueryType.FundIssue) {
+      fundIssueCallback(c.dev, c.url, c.value, result);
     } else {
-      // No active pull request or unknown oraclize query type
+      // No query type
       throw;
     }
   }
 
-  function openCallback(address addr, string prUrl, string result) {
-    if (!createPullRequest(addr, prUrl, result)) {
+  function openCallback(address addr, string url, string result) {
+    if (!createPullRequest(addr, url, result)) {
       // Invalid pull request
       collaterals[addr] -= calcPenalty(collaterals[addr]);
 
       OpenCallbackFailed(addr, collaterals[addr]);
     } else {
-      OpenCallbackSuccess(addr, prUrl);
+      OpenCallbackSuccess(addr, url);
     }
   }
 
@@ -142,7 +158,18 @@ contract DevBounty is usingOraclize {
     }
   }
 
-  function createPullRequest(address addr, string prUrl, string oraclizeResult) returns(bool) {
+  function fundIssueCallback(address addr, string url, uint value, string result) {
+    if (bytes(result).length == 0) {
+      // Issue does not exist
+      FundIssueCallbackFailed(addr, url);
+    } else {
+      issues[url] = Issue(url, value, true);
+
+      FundIssueCallbackSuccess(addr, url, value);
+    }
+  }
+
+  function createPullRequest(address addr, string url, string oraclizeResult) returns(bool) {
     if (bytes(oraclizeResult).length == 0) return false;
 
     // Expect Oraclize result to be of form:
@@ -154,7 +181,7 @@ contract DevBounty is usingOraclize {
     if (!issues[issueUrl].initialized) return false;
     if (!checkPullRequestAddr(addr, body)) return false;
 
-    activePullRequests[addr] = PullRequest(prUrl, issues[issueUrl], true);
+    activePullRequests[addr] = PullRequest(url, issues[issueUrl], true);
 
     return true;
   }
