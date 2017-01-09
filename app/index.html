@@ -6,7 +6,6 @@
         <link href="./bootstrap.min.css" rel="stylesheet"/>
         <link href="./bootstrap-theme.min.css" rel="stylesheet"/>
         <link href="./app.css" rel='stylesheet' type='text/css'>
-        <script src="./app.js"></script>
     </head>
     <body>
         <div>
@@ -14,6 +13,10 @@
                 <h1>DevBounty</h1>
                 <div>
                     <h2>Rewards for open-source software contributions</h2>
+                </div>
+                <div>
+                    <a href="postBounty.html" class="btn btn-success" id="postBountyBtn">Post Bounty</a>
+                    <a href="#bountiesRow" class="btn btn-success" id="viewBountiesBtn">View Bounties</a>
                 </div>
             </div>
 
@@ -66,10 +69,13 @@
                                 <th>Bounty (ETH)</th>
                             </tr>
                         </thead>
+                        <tbody id="activeBounties"></tbody>
                     </table>
                 </div>
             </div>
 
         </div>
+
+        <script src="./app.js"></script>
     </body>
 </html>

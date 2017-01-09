@@ -1,6 +1,7 @@
 module.exports = {
   build: {
     "index.html": "index.html",
+    "postBounty.html": "postBounty.html",
     "app.js": [
       "javascripts/app.js",
     ],
