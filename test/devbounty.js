@@ -98,20 +98,19 @@ contract('DevBounty', function(accounts) {
 
           assert.equal(result.args.updatedClaimableBounty.toNumber(), issueBounty.toNumber(), 'claimable bounty should match issue bounty');
 
-          // await c.claimPayment({from: accounts[9]});
-
         });
 
         await c.mergePullRequest(prUrl, mergeJsonHelper, {from: accounts[9]});
+        console.log('merged');
       });
 
       const postedCollateral = web3.toWei(1, 'ether');
       await c.openPullRequest(prUrl, openJsonHelper, {from: accounts[9], value: postedCollateral});
-
+      console.log('opened');
     });
 
     await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[1], value: amount});
-
+    console.log('funded');
   });
 
 });

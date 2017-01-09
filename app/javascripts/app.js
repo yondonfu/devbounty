@@ -1,39 +1,32 @@
-// var accounts;
-// var account;
+var accounts;
+var account;
 
-// function setStatus(message) {
-//   var status = document.getElementById("status");
-//   status.innerHTML = message;
-// };
+function updateEthNetworkStatus() {
+  var addressField = document.getElementById("address");
+  addressField.innerHTML = account;
 
-// function refreshBalance() {
-//   var meta = MetaCoin.deployed();
+  var walletBalanceField = document.getElementById("walletBalance");
+  web3.eth.getBalance(account, function(err, balance) {
+    walletBalanceField.innerHTML = web3.fromWei(balance, "ether") + " ETH";
+  });
 
-//   meta.getBalance.call(account, {from: account}).then(function(value) {
-//     var balance_element = document.getElementById("balance");
-//     balance_element.innerHTML = value.valueOf();
-//   }).catch(function(e) {
-//     console.log(e);
-//     setStatus("Error getting balance; see log.");
-//   });
-// };
+  var networkField = document.getElementById("network");
+  web3.version.getNetwork(function(err, netId) {
+    var networkName;
 
-// function sendCoin() {
-//   var meta = MetaCoin.deployed();
+    if (netId == 1) {
+      networkName = "Etherem Main Net";
+    } else if (netId == 2) {
+      networkName = "Morden Test Net";
+    } else if (netId == 3) {
+      networkName = "Ropsten Test Net";
+    } else {
+      networkName = "Unknown Network";
+    }
 
-//   var amount = parseInt(document.getElementById("amount").value);
-//   var receiver = document.getElementById("receiver").value;
-
-//   setStatus("Initiating transaction... (please wait)");
-
-//   meta.sendCoin(receiver, amount, {from: account}).then(function() {
-//     setStatus("Transaction complete!");
-//     refreshBalance();
-//   }).catch(function(e) {
-//     console.log(e);
-//     setStatus("Error sending coin; see log.");
-//   });
-// };
+    network.innerHTML = networkName;
+  });
+}
 
 window.onload = function() {
   web3.eth.getAccounts(function(err, accs) {
@@ -49,5 +42,7 @@ window.onload = function() {
 
     accounts = accs;
     account = accounts[0];
+
+    updateEthNetworkStatus();
   });
 }

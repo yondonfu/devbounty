@@ -1,19 +1,75 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <title>DevBounty</title>
-  <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
-  <link href="./app.css" rel='stylesheet' type='text/css'>
-  <script src="./app.js"></script>
-</head>
-<body>
-  <h1>Post Bounty</h1>
+    <head>
+        <title>DevBounty</title>
+        <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+        <link href="./bootstrap.min.css" rel="stylesheet"/>
+        <link href="./bootstrap-theme.min.css" rel="stylesheet"/>
+        <link href="./app.css" rel='stylesheet' type='text/css'>
+        <script src="./app.js"></script>
+    </head>
+    <body>
+        <div>
+            <div class="row" id="titleRow">
+                <h1>DevBounty</h1>
+                <div>
+                    <h2>Rewards for open-source software contributions</h2>
+                </div>
+            </div>
 
-  <div>
-      Issue Url: <input type="text"/>
-      Amount: <input type="number"/>
+            <div class="row" id="aboutRow">
+                <h1>About</h1>
+                <div class="col-md-1"></div>
+                <div class="col-md-5">
+                    <div class="panel panel-info">
+                        <div class="panel-heading">
+                            <div class="panel-title">
+                                <h3>Where to start</h3>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            Welcome!
+                        </div>
+                    </div>
+                </div>
 
-      <button>Post Bounty</button>
-  </div>
-</body>
+                <div class="col-md-5">
+                    <div class="panel panel-success">
+                        <div class="panel-heading">
+                            <div class="panel-title">
+                                <h3>Etherem Network Status</h3>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <div>
+                                Your address: <span id="address"></span>
+                            </div>
+                            <div>
+                                Your wallet balance: <span id="walletBalance"></span>
+                            </div>
+                            <div>
+                                Your network: <span id="network"></span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row" id="bountiesRow">
+                <h1>Active Bounties</h1>
+                <div class="col-md-1"></div>
+                <div class="col-md-10">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Issue Url</th>
+                                <th>Bounty (ETH)</th>
+                            </tr>
+                        </thead>
+                    </table>
+                </div>
+            </div>
+
+        </div>
+    </body>
 </html>

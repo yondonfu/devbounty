@@ -35,21 +35,21 @@ contract DevBounty is usingOraclize {
   mapping(address => uint) public collaterals; // developer address => posted collateral
   mapping(address => uint) public claimableBounties; // developer address => claimable bounty amount
 
-  enum OraclizeQueryType { OpenPullRequest, MergePullRequest, FundIssue, NullQuery }
+  enum OraclizeQueryType { OpenPullRequest, MergePullRequest, FundIssue, NoQuery }
   OraclizeQueryType oraclizeQueryType;
 
   mapping(bytes32 => OraclizeCallback) public oraclizeCallbacks;
 
   event OpenCallbackSuccess(address dev, string url);
-  event OpenCallbackFailed(address dev, uint updatedCollateral);
-  event MergeCallbackSuccess(address dev, uint updatedClaimableBounty);
-  event MergeCallbackFailed(address dev, uint updatedCollateral);
+  event OpenCallbackFailed(address dev, string url, uint updatedCollateral);
+  event MergeCallbackSuccess(address dev, string url, uint updatedClaimableBounty);
+  event MergeCallbackFailed(address dev, string url, uint updatedCollateral);
   event FundIssueCallbackSuccess(address dev, string url, uint updatedBounty);
   event FundIssueCallbackFailed(address dev, string url);
 
   function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0x21ab2580dbe1d1ce15cf31ee5ca7f980add548f3);
+    OAR = OraclizeAddrResolverI(0x30ac03383bbf40d2bc90963c73da74590fa5f591);
 
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;
@@ -123,11 +123,11 @@ contract DevBounty is usingOraclize {
     if (c.queryType == OraclizeQueryType.OpenPullRequest) {
       openCallback(c.dev, c.url, result);
     } else if (c.queryType == OraclizeQueryType.MergePullRequest) {
-      mergeCallback(c.dev, result);
+      mergeCallback(c.dev, c.url, result);
     } else if (c.queryType == OraclizeQueryType.FundIssue) {
       fundIssueCallback(c.dev, c.url, c.value, result);
     } else {
-      // No query type
+      // No query
       throw;
     }
   }
@@ -137,22 +137,22 @@ contract DevBounty is usingOraclize {
       // Invalid pull request
       collaterals[addr] -= calcPenalty(collaterals[addr]);
 
-      OpenCallbackFailed(addr, collaterals[addr]);
+      OpenCallbackFailed(addr, url, collaterals[addr]);
     } else {
       OpenCallbackSuccess(addr, url);
     }
   }
 
-  function mergeCallback(address addr, string result) {
+  function mergeCallback(address addr, string url, string result) {
     if (bytes(result).length == 0 || strCompare(result, "False") == 0 || !activePullRequests[addr].initialized) {
       // Pull request not merged or no such open pull request
       collaterals[addr] -= calcPenalty(collaterals[addr]);
 
-      MergeCallbackFailed(addr, collaterals[addr]);
+      MergeCallbackFailed(addr, url, collaterals[addr]);
     } else {
       claimableBounties[addr] += activePullRequests[addr].issue.bounty;
 
-      MergeCallbackSuccess(addr, claimableBounties[addr]);
+      MergeCallbackSuccess(addr, url, claimableBounties[addr]);
 
       delete activePullRequests[addr];
     }
