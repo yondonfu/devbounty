@@ -5,6 +5,15 @@ module.exports = {
     "app.js": [
       "javascripts/app.js",
     ],
+    "utils.js": [
+      "javascripts/utils.js"
+    ],
+    "postBounty.js": [
+      "javascripts/postBounty.js"
+    ],
+    "bootstrap.min.js": [
+      "javascripts/bootstrap.min.js"
+    ],
     "app.css": [
       "stylesheets/app.css"
     ],

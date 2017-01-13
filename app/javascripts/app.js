@@ -1,30 +1,30 @@
 var accounts;
 var account;
+var devBounty;
 
-function updateEthNetworkStatus() {
-  var addressField = document.getElementById("address");
-  addressField.innerHTML = account;
+function updateBounties() {
+  var activeBounties = document.getElementById("activeBounties");
+  var activeBountiesHTML = "";
 
-  var walletBalanceField = document.getElementById("walletBalance");
-  web3.eth.getBalance(account, function(err, balance) {
-    walletBalanceField.innerHTML = web3.fromWei(balance, "ether") + " ETH";
-  });
+  devBounty.getIssueCount.call().then(function(count) {
+    console.log("Issue Count: " + count);
 
-  var networkField = document.getElementById("network");
-  web3.version.getNetwork(function(err, netId) {
-    var networkName;
+    for (var i = 0; i < count; i++) {
+      devBounty.issueUrls.call(i).then(function(url) {
+        console.log(url);
 
-    if (netId == 1) {
-      networkName = "Etherem Main Net";
-    } else if (netId == 2) {
-      networkName = "Morden Test Net";
-    } else if (netId == 3) {
-      networkName = "Ropsten Test Net";
-    } else {
-      networkName = "Unknown Network";
+        devBounty.getIssueByUrl.call(url).then(function(issue) {
+          console.log(issue[0]);
+          console.log(issue[1]);
+          console.log(issue[2]);
+
+          activeBountiesHTML = activeBountiesHTML + "<tr><td>" + issue[0] + "</td>" + "<td>" + web3.fromWei(issue[1], 'ether') +
+          "</td><td><a href=\"#\" class=\"btn btn-success\">View Issue</a></td><td><a href=\"#\" class=\"btn btn-success\">Fund Bounty</a></td></tr>";
+
+          activeBounties.innerHTML = activeBountiesHTML;
+        });
+      });
     }
-
-    network.innerHTML = networkName;
   });
 }
 
@@ -43,6 +43,18 @@ window.onload = function() {
     accounts = accs;
     account = accounts[0];
 
-    updateEthNetworkStatus();
+    getContractAddress(function(err, addr) {
+      if (err != null) {
+        console.log("Could not find network.");
+      }
+
+      devBounty = DevBounty.at(addr);
+
+      console.log(devBounty);
+
+      updateEthNetworkStatus();
+      updateBounties();
+    });
+
   });
 }

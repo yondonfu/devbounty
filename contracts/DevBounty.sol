@@ -30,6 +30,7 @@ contract DevBounty is usingOraclize {
   uint public penaltyDenom;
   uint public oraclizeGas;
 
+  string[] public issueUrls;
   mapping(string => Issue) issues; // issue url => Issue
   mapping(address => PullRequest) activePullRequests; // developer address => PullRequest
   mapping(address => uint) public collaterals; // developer address => posted collateral
@@ -49,7 +50,7 @@ contract DevBounty is usingOraclize {
 
   function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0x30ac03383bbf40d2bc90963c73da74590fa5f591);
+    OAR = OraclizeAddrResolverI(0x5f7f6557f56bdaa7b9d7ffa52c8bae05f0b587fc);
 
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;
@@ -76,6 +77,10 @@ contract DevBounty is usingOraclize {
       // Already know the issue exists so we do not need an oraclize query
       issues[url].bounty += msg.value;
     }
+  }
+
+  function getIssueCount() public constant returns (uint) {
+    return issueUrls.length;
   }
 
   function getIssueByUrl(string url) public constant returns(string, uint, bool) {
@@ -164,6 +169,7 @@ contract DevBounty is usingOraclize {
       FundIssueCallbackFailed(addr, url);
     } else {
       issues[url] = Issue(url, value, true);
+      issueUrls.push(url);
 
       FundIssueCallbackSuccess(addr, url, value);
     }

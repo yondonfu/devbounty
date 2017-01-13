@@ -52,65 +52,65 @@ contract('DevBounty', function(accounts) {
     await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[1], value: amount});
   });
 
-  it('should open and merge a pull request and claim payment', async function() {
-    const minCollateral = web3.toWei(1, 'ether');
-    const penaltyNum = 15;
-    const penaltyDenom = 100;
-    const oraclizeGas = 400000;
+  // it('should open and merge a pull request and claim payment', async function() {
+  //   const minCollateral = web3.toWei(1, 'ether');
+  //   const penaltyNum = 15;
+  //   const penaltyDenom = 100;
+  //   const oraclizeGas = 400000;
 
-    let c = await DevBounty.new(minCollateral, penaltyNum, penaltyDenom, oraclizeGas, {from:accounts[0]});
+  //   let c = await DevBounty.new(minCollateral, penaltyNum, penaltyDenom, oraclizeGas, {from:accounts[0]});
 
-    const issueUrl = 'https://api.github.com/repos/yondonfu/devbounty/issues/1';
-    const issueJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/issues/1).url';
-    const amount = web3.toWei(1, 'ether');
+  //   const issueUrl = 'https://api.github.com/repos/yondonfu/devbounty/issues/1';
+  //   const issueJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/issues/1).url';
+  //   const amount = web3.toWei(1, 'ether');
 
-    let fundIssueEvent = c.FundIssueCallbackSuccess({});
+  //   let fundIssueEvent = c.FundIssueCallbackSuccess({});
 
-    fundIssueEvent.watch(async function(err, result) {
-      fundIssueEvent.stopWatching();
-      if (err) { throw err; }
+  //   fundIssueEvent.watch(async function(err, result) {
+  //     fundIssueEvent.stopWatching();
+  //     if (err) { throw err; }
 
-      const issueBounty = result.args.updatedBounty;
+  //     const issueBounty = result.args.updatedBounty;
 
-      const prUrl = 'https://api.github.com/repos/yondonfu/devbounty/pulls/1';
-      const openJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).[issue_url, body]';
-      const mergeJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).merged';
+  //     const prUrl = 'https://api.github.com/repos/yondonfu/devbounty/pulls/1';
+  //     const openJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).[issue_url, body]';
+  //     const mergeJsonHelper = 'json(https://api.github.com/repos/yondonfu/devbounty/pulls/1).merged';
 
-      let openEvent = c.OpenCallbackSuccess({});
+  //     let openEvent = c.OpenCallbackSuccess({});
 
-      openEvent.watch(async function(err, result) {
-        openEvent.stopWatching();
-        if (err) { throw err; }
+  //     openEvent.watch(async function(err, result) {
+  //       openEvent.stopWatching();
+  //       if (err) { throw err; }
 
-        let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
-        assert.equal(prUrl, pullRequest[0], 'pull request should have the correct url');
-        assert.equal(issueUrl, pullRequest[1], 'pull request should have the correct issue url');
+  //       let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
+  //       assert.equal(prUrl, pullRequest[0], 'pull request should have the correct url');
+  //       assert.equal(issueUrl, pullRequest[1], 'pull request should have the correct issue url');
 
-        let mergeEvent = c.MergeCallbackSuccess({});
+  //       let mergeEvent = c.MergeCallbackSuccess({});
 
-        mergeEvent.watch(async function(err, result) {
-          mergeEvent.stopWatching();
-          if (err) { throw err; }
+  //       mergeEvent.watch(async function(err, result) {
+  //         mergeEvent.stopWatching();
+  //         if (err) { throw err; }
 
-          let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
-          assert.equal('', pullRequest[0], 'pull request should have zeroed out url');
-          assert.equal('', pullRequest[1], 'pull request should have zeroed out issue url');
+  //         let pullRequest = await c.getPullRequestByAddr(accounts[9], {from: accounts[9]});
+  //         assert.equal('', pullRequest[0], 'pull request should have zeroed out url');
+  //         assert.equal('', pullRequest[1], 'pull request should have zeroed out issue url');
 
-          assert.equal(result.args.updatedClaimableBounty.toNumber(), issueBounty.toNumber(), 'claimable bounty should match issue bounty');
+  //         assert.equal(result.args.updatedClaimableBounty.toNumber(), issueBounty.toNumber(), 'claimable bounty should match issue bounty');
 
-        });
+  //       });
 
-        await c.mergePullRequest(prUrl, mergeJsonHelper, {from: accounts[9]});
-        console.log('merged');
-      });
+  //       await c.mergePullRequest(prUrl, mergeJsonHelper, {from: accounts[9]});
+  //       console.log('merged');
+  //     });
 
-      const postedCollateral = web3.toWei(1, 'ether');
-      await c.openPullRequest(prUrl, openJsonHelper, {from: accounts[9], value: postedCollateral});
-      console.log('opened');
-    });
+  //     const postedCollateral = web3.toWei(1, 'ether');
+  //     await c.openPullRequest(prUrl, openJsonHelper, {from: accounts[9], value: postedCollateral});
+  //     console.log('opened');
+  //   });
 
-    await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[1], value: amount});
-    console.log('funded');
-  });
+  //   await c.fundIssue(issueUrl, issueJsonHelper, {from: accounts[1], value: amount});
+  //   console.log('funded');
+  // });
 
 });
