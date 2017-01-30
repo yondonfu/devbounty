@@ -1,10 +1,13 @@
 var accounts;
 var account;
 var devBounty;
+var issues;
 
 function updateBounties() {
   var activeBounties = document.getElementById("activeBounties");
   var activeBountiesHTML = "";
+
+  issues = []; // Clear
 
   devBounty.getIssueCount.call().then(function(count) {
     console.log("Issue Count: " + count);
@@ -18,17 +21,35 @@ function updateBounties() {
           console.log(issue[1]);
           console.log(issue[2]);
 
+          issues.push(issue);
+
           activeBountiesHTML = activeBountiesHTML + "<tr><td>" + issue[0] + "</td>" + "<td>" + web3.fromWei(issue[1], 'ether') +
-          "</td><td><a href=\"#\" class=\"btn btn-success\">View Issue</a></td><td><a href=\"#\" class=\"btn btn-success\">Fund Bounty</a></td></tr>";
+          "</td><td><button class=\"btn btn-success view-issue-btn\">View Issue</button></td><td><a href=\"#\" class=\"btn btn-success fund-bounty-btn\">Fund Bounty</a></td></tr>";
 
           activeBounties.innerHTML = activeBountiesHTML;
+
         });
       });
     }
   });
 }
 
+function viewIssue(idx) {
+  console.log(issues[idx]);
+}
+
+function setClickHandlers() {
+  // $("body table tr").on("click", ".view-issue-btn", function(e) {
+  //   console.log("yeah");
+  // });
+  $("body table").on("click", ".view-issue-btn", function(e) {
+    var rowIdx = $(this).closest("td").parent()[0].sectionRowIndex;
+    window.location = "viewIssue.html?url=" + issues[rowIdx][0];
+  });
+}
+
 window.onload = function() {
+  issues = [];
   web3.eth.getAccounts(function(err, accs) {
     if (err != null) {
       alert("There was an error fetching your accounts.");
@@ -54,6 +75,7 @@ window.onload = function() {
 
       updateEthNetworkStatus();
       updateBounties();
+      setClickHandlers();
     });
 
   });

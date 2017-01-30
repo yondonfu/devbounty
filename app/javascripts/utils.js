@@ -39,7 +39,7 @@ function getContractAddress(callback) {
       err = "DevBounty is not deployed on Ropsten test net yet.";
     } else {
       // Local dev with testrpc
-      addr = "0x58d27d93f25ad2bb0dcc6a3cc6e14d1989a305be";
+      addr = "0x118f900f53c7d2ac0e690ed5dc2411bce4c7980d";
     }
 
     callback(err, addr);

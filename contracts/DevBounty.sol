@@ -50,7 +50,7 @@ contract DevBounty is usingOraclize {
 
   function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     // ethereum-bridge
-    OAR = OraclizeAddrResolverI(0x5f7f6557f56bdaa7b9d7ffa52c8bae05f0b587fc);
+    OAR = OraclizeAddrResolverI(0x06b9c4b26e3994bd19c466d8881352d5edcc4511);
 
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;

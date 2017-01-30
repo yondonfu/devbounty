@@ -2,6 +2,7 @@ module.exports = {
   build: {
     "index.html": "index.html",
     "postBounty.html": "postBounty.html",
+    "viewIssue.html": "viewIssue.html",
     "app.js": [
       "javascripts/app.js",
     ],
@@ -10,6 +11,9 @@ module.exports = {
     ],
     "postBounty.js": [
       "javascripts/postBounty.js"
+    ],
+    "viewIssue.js": [
+      "javascripts/viewIssue.js"
     ],
     "bootstrap.min.js": [
       "javascripts/bootstrap.min.js"
