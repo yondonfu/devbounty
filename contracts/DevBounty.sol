@@ -1,35 +1,35 @@
 pragma solidity ^0.4.6;
 
-import "usingOraclize.sol";
-import "strings.sol";
+import "GithubOraclize.sol";
+import "Collateralize.sol";
+import "Repository.sol";
 
-contract DevBounty is usingOraclize {
-  using strings for *;
-
-  struct OraclizeCallback {
-    address sender;
-    string url;
-    OraclizeQueryType queryType;
+contract DevBounty is GithubOraclize, Collateralize {
+  struct RepositoryMetadata {
+    uint minCollateral;
+    uint penaltyNum;
+    uint penaltyDenom;
+    uint oraclizeGas;
+    bool initialized;
   }
 
-  enum OraclizeQueryType { VerifyMaintainer, NoQuery }
+  string[] public repositoryUrls;
 
   // repository url => repository contract address
   mapping(string => address) public repositories;
-  mapping(address => uint) public collaterals;
-  mapping(bytes32 => OraclizeCallback) public oraclizeCallbacks;
+  mapping(string => RepositoryMetadata) repositoryMetadataSet;
 
-  uint public minCollateral;
-  uint public oraclizeGas;
+  event MaintainerSuccess(address claimant, string url);
+  event MaintainerFailed(address claimant, string url);
 
-  function DevBounty(uint _minCollateral, uint _oraclizeGas) {
+  function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     minCollateral = _minCollateral;
+    penaltyNum = _penaltyNum;
+    penaltyDenom = _penaltyDenom;
     oraclizeGas = _oraclizeGas;
   }
 
-  function registerRepository(string url, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) payable {
-    if (msg.value < minCollateral) throw;
-
+  function registerRepository(string jsonHelper, string url, uint minCollateral, uint penaltyNum, uint penaltyDenom, uint oraclizeGas) requiresCollateral payable {
     collaterals[msg.sender] = msg.value;
 
     uint initialBalance = this.balance;
@@ -40,45 +40,54 @@ contract DevBounty is usingOraclize {
     uint oraclizeFee = initialBalance - updatedBalance;
     collaterals[msg.sender] -= oraclizeFee;
 
+    repositoryMetadataSet[url] = RepositoryMetadata(minCollateral, penaltyNum, penaltyDenom, oraclizeGas, false);
+
     oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, OraclizeQueryType.VerifyMaintainer);
   }
 
-  function oraclizeQuery(string jsonHelper) returns (bytes32 queryId) {
-    return oraclize_query('URL', jsonHelper, oraclizeGas);
+  /* Post-verification operations. */
+
+  function verifyMaintainerSuccessCallback(address claimant, string url, address[] maintainers) {
+    repositoryMetadataSet[url].initialized = true;
+    RepositoryMetadata memory meta = repositoryMetadataSet[url];
+
+    address repositoryAddr = new Repository(url, maintainers, meta.minCollateral, meta.penaltyNum, meta.penaltyDenom, meta.oraclizeGas);
+    repositories[url] = repositoryAddr;
+    repositoryUrls.push(url);
+
+    MaintainerSuccess(claimant, url);
   }
 
-  function __callback(bytes32 queryId, string result) {
-    if (msg.sender != oraclize_cbAddress()) throw; // Non-oraclize message
+  function verifyMaintainerFailedCallback(address claimant, string url) {
+    collaterals[claimant] -= calcPenalty(collaterals[claimant]);
 
-    OraclizeCallback memory c = oraclizeCallbacks[oraclizeId];
+    delete repositoryMetadataSet[url];
 
-    if (c.queryType == OraclizeQueryType.VerifyMaintainer) {
-      verifyMaintainerCallback(c.sender, c.url, result);
-    } else {
-      // No query
-      throw;
-    }
+    MaintainerFailed(claimant, url);
   }
 
-  function verifyMaintainerCallback(address sender, string url, string result) {
-    if (!verifyMaintainer(result)) {
-      collaterals[sender] -= calcPenalty(collaterals[sender]);
-    } else {
-      address repositoryAddr = new Repository(url, minCollateral, penaltyNum, penaltyDenom, oraclizeGas);
-      repositories[url] = repositoryAddr;
-    }
+  function verifyOpenedPullRequestSuccessCallback(address claimant, string url, string result) {
+    // Not needed for this contract
   }
 
-  function verifyMaintainer(address sender, string result) {
-    // Expect PROOF.md contents to be of the following form:
-    // <ethAddr>\r\n<ethAddr>...
-    var contents = result.toSlice();
-    var delim = "\n".toSlice();
-    var parts = new string[](contents.count(delim));
-
-    for (uint i = 0; i < parts.length; i++) {
-      parts[i] = contents.split(delim).toString();
-    }
-
+  function verifyOpenedPullRequestFailedCallback(address claimant, string url) {
+    // Not needed for this contract
   }
+
+  function verifyMergedPullRequestSuccessCallback(address claimant, string url, string result) {
+    // Not needed for this contract
+  }
+
+  function verifyMergedPullRequestFailedCallback(address claimant, string url) {
+    // Not needed for this contract
+  }
+
+  function verifyIssueSuccessCallback(address claimant, string url, uint amount) {
+    // Not needed for this contract
+  }
+
+  function verifyIssueFailedCallback(address claimant, string url) {
+    // Not needed for this contract
+  }
+
 }
