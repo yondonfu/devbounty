@@ -1,11 +1,12 @@
 pragma solidity ^0.4.6;
 
-import "strings.sol";
+import "GithubOraclizeParser.sol";
 import "GithubOraclize.sol";
 import "Collateralize.sol";
+import "ClaimableBounty.sol";
 
-contract Repository is GithubOraclize, Collateralize {
-  using strings for *;
+contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
+  using GithubOraclizeParser for string;
 
   struct Issue {
     string url;
@@ -30,7 +31,6 @@ contract Repository is GithubOraclize, Collateralize {
 
   mapping(string => Issue) issues; // issue url => Issue
   mapping(string => PullRequest) activePullRequests; // pull request url => PullRequest
-  mapping(address => uint) public claimableBounties; // developer address => claimable bounty amount
 
   event OpenedPullRequestSuccess(address claimant, string url);
   event OpenedPullRequestFailed(address claimant, string url, uint updatedCollateral);
@@ -44,8 +44,13 @@ contract Repository is GithubOraclize, Collateralize {
     _;
   }
 
+  modifier issueExists(string issueUrl) {
+    if (!issues[issueUrl].initialized) throw;
+    _;
+  }
+
   function Repository(string _url, address[] _maintainers, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _maintainerFeeNum, uint _maintainerFeeDenom, uint _oraclizeGas) {
-    OAR = OraclizeAddrResolverI(0x6f485c8bf6fc43ea212e93bbf8ce046c7f1cb475);
+    /* OAR = OraclizeAddrResolverI(0x6f485c8bf6fc43ea212e93bbf8ce046c7f1cb475); */
 
     url = _url;
 
@@ -63,66 +68,79 @@ contract Repository is GithubOraclize, Collateralize {
 
   /* User transactions */
 
-  function openPullRequest(string jsonHelper, string url, string issueUrl) requiresCollateral payable {
+  function openPullRequest(string jsonHelper, string url, string issueUrl) requiresCollateral issueExists(issueUrl) payable {
     collaterals[msg.sender] = msg.value;
 
-    uint initialBalance = this.balance;
-
-    bytes32 queryId = oraclizeQuery(jsonHelper); // Client has to provide the constructed jsonHelper - json(url).[issue_url, body]
-
-    uint updatedBalance = this.balance;
-    uint oraclizeFee = initialBalance - updatedBalance;
+    // jsonHelper format: json(url).[issue_url, body]
+    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, url, OraclizeQueryType.VerifyOpenedPullRequest);
     collaterals[msg.sender] -= oraclizeFee;
 
     activePullRequests[url] = PullRequest(url, msg.sender, issues[issueUrl], false);
-
-    oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, OraclizeQueryType.VerifyOpenedPullRequest);
   }
 
   function mergePullRequest(string jsonHelper, string url) onlyMaintainers requiresCollateral payable {
     collaterals[msg.sender] = msg.value;
 
-    uint initialBalance = this.balance;
-
-    bytes32 queryId = oraclizeQuery(jsonHelper); // Client has to provide the constructed jsonHelper - json(url).merged
-
-    uint updatedBalance = this.balance;
-    uint oraclizeFee = initialBalance - updatedBalance;
+    // jsonHelper format: json(url).merged
+    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, url, OraclizeQueryType.VerifyMergedPullRequest);
     collaterals[msg.sender] -= oraclizeFee;
-
-    oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, OraclizeQueryType.VerifyMergedPullRequest);
   }
 
   function fundIssue(string jsonHelper, string url) payable {
     if (!issues[url].initialized) {
-      uint initialBalance = this.balance;
-
-      bytes32 queryId = oraclizeQuery(jsonHelper); // Client has to provide the constructed json helper - json(url).url
-
-      uint updatedBalance = this.balance;
-      uint oraclizeFee = initialBalance - updatedBalance;
+      // jsonHelper format: json(url).url
+      uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, url, OraclizeQueryType.VerifyIssue);
 
       issues[url] = Issue(url, msg.value - oraclizeFee, false);
-
-      oraclizeCallbacks[queryId] = OraclizeCallback(msg.sender, url, OraclizeQueryType.VerifyIssue);
     } else {
-      // Issue already exists
+      // Issue already exists - don't need oraclize
       issues[url].bounty += msg.value;
     }
   }
 
-  /* Post-verification operations */
+  /* Callbacks */
 
-  function verifyMaintainerSuccessCallback(address claimant, string url, address[] maintainers) {
-    // Not needed for this contract
+  function __callback(bytes32 queryId, string result) onlyOraclize {
+    OraclizeCallback memory c = oraclizeCallbacks[queryId];
+
+    if (c.queryType == OraclizeQueryType.VerifyOpenedPullRequest) {
+      verifyOpenedPullRequestCallback(c.claimant, c.url, result);
+    } else if (c.queryType == OraclizeQueryType.VerifyMergedPullRequest) {
+      verifyMergedPullRequestCallback(c.claimant, c.url, result);
+    } else if (c.queryType == OraclizeQueryType.VerifyIssue) {
+      verifyIssueCallback(c.claimant, c.url, result);
+    } else {
+      // Unknown query
+      throw;
+    }
   }
 
-  function verifyMaintainerFailedCallback(address claimant, string url) {
-    // Not needed for this contract
+  function verifyOpenedPullRequestCallback(address claimant, string url, string result) internal {
+    if (!result.isValid()) {
+      verifyOpenedPullRequestFailedCallback(claimant, url);
+    } else {
+      verifyOpenedPullRequestSuccessCallback(claimant, url, result);
+    }
   }
 
-  function verifyOpenedPullRequestSuccessCallback(address claimant, string url, string result) {
-    if (!checkPullRequest(claimant, url, result)) {
+  function verifyMergedPullRequestCallback(address claimant, string url, string result) internal {
+    if (!result.isValid() || !result.isFalse()) {
+      verifyMergedPullRequestFailedCallback(claimant, url);
+    } else {
+      verifyMergedPullRequestSuccessCallback(claimant, url, result);
+    }
+  }
+
+  function verifyIssueCallback(address claimant, string url, string result) internal {
+    if (!result.isValid()) {
+      verifyIssueFailedCallback(claimant, url);
+    } else {
+      verifyIssueSuccessCallback(claimant, url, result);
+    }
+  }
+
+  function verifyOpenedPullRequestSuccessCallback(address claimant, string url, string result) internal {
+    if (result.checkPullRequest(claimant, activePullRequests[url].issue.url)) {
       verifyOpenedPullRequestFailedCallback(claimant, url);
     } else {
       activePullRequests[url].initialized = true;
@@ -131,7 +149,7 @@ contract Repository is GithubOraclize, Collateralize {
     }
   }
 
-  function verifyOpenedPullRequestFailedCallback(address claimant, string url) {
+  function verifyOpenedPullRequestFailedCallback(address claimant, string url) internal {
     collaterals[claimant] -= calcPenalty(collaterals[claimant]);
 
     delete activePullRequests[url];
@@ -139,7 +157,7 @@ contract Repository is GithubOraclize, Collateralize {
     OpenedPullRequestFailed(claimant, url, collaterals[claimant]);
   }
 
-  function verifyMergedPullRequestSuccessCallback(address claimant, string url, string result) {
+  function verifyMergedPullRequestSuccessCallback(address claimant, string url, string result) internal {
     if (!activePullRequests[url].initialized) {
       verifyMergedPullRequestFailedCallback(claimant, url);
     } else {
@@ -156,68 +174,23 @@ contract Repository is GithubOraclize, Collateralize {
     }
   }
 
-  function verifyMergedPullRequestFailedCallback(address claimant, string url) {
+  function verifyMergedPullRequestFailedCallback(address claimant, string url) internal {
     collaterals[claimant] -= calcPenalty(collaterals[claimant]);
 
     MergedPullRequestFailed(claimant, url, collaterals[claimant]);
   }
 
-  function verifyIssueSuccessCallback(address claimant, string url, string result) {
+  function verifyIssueSuccessCallback(address claimant, string url, string result) internal {
     issues[url].initialized = true;
     issueUrls.push(url);
 
     IssueSuccess(claimant, url, issues[url].bounty);
   }
 
-  function verifyIssueFailedCallback(address claimant, string url) {
+  function verifyIssueFailedCallback(address claimant, string url) internal {
     delete issues[url];
 
     IssueFailed(claimant, url);
-  }
-
-  /* Parsing helpers */
-
-  function checkPullRequest(address claimant, string url, string oraclizeResult) returns (bool) {
-    // Expect Oraclize result to be of form:
-    // ["<issueUrl>", "<body>"]
-    var resultSlice = oraclizeResult.toSlice().beyond("[".toSlice()).until("]".toSlice());
-    var issueUrl = resultSlice.split(",".toSlice()).beyond("\"".toSlice()).until("\"".toSlice()).toString();
-    var body = resultSlice.beyond(" \"".toSlice()).until("\"".toSlice()).toString();
-
-    if (!issues[issueUrl].initialized) return false;
-    if (!checkPullRequestAddr(claimant, body)) return false;
-
-    return true;
-  }
-
-  function checkPullRequestAddr(address claimant, string body) returns (bool) {
-    // Expect pull request body to be of form:
-    // <ethAddr>\r\n<message>
-    var strAddr = body.toSlice().split("\n".toSlice()).until("\r".toSlice()).toString();
-    var pullRequestAddr = parseAddr(strAddr);
-
-    if (pullRequestAddr == claimant) {
-      return true;
-    } else {
-      return false;
-    }
-    return pullRequestAddr == claimant;
-  }
-
-  /* Withdrawl */
-
-  function claimBounty() external {
-    address payee = msg.sender;
-
-    uint bounty = claimableBounties[payee];
-
-    if (bounty == 0) throw;
-    if (this.balance < bounty) throw;
-
-    claimableBounties[payee] = 0;
-    if (!payee.send(bounty)) {
-      claimableBounties[payee] = bounty;
-    }
   }
 
   /* Utils */
