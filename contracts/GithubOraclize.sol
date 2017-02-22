@@ -37,8 +37,4 @@ contract GithubOraclize is usingOraclize {
 
     return initialBalance - updatedBalance;
   }
-
-  /* Callbacks */
-
-  function __callback(bytes32 queryId, string result);
 }
