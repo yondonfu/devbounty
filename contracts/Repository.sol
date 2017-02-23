@@ -54,7 +54,7 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
   }
 
   function Repository(string _url, address[] _maintainers, uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _maintainerFeeNum, uint _maintainerFeeDenom, uint _oraclizeGas) {
-    /* OAR = OraclizeAddrResolverI(0x6f485c8bf6fc43ea212e93bbf8ce046c7f1cb475); */
+    OAR = OraclizeAddrResolverI(0x6f485c8bf6fc43ea212e93bbf8ce046c7f1cb475);
 
     url = _url;
 

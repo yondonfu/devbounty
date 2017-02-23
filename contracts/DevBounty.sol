@@ -1,8 +1,8 @@
 pragma solidity ^0.4.6;
 
 import "strings.sol";
-import "GithubOraclize.sol";
 import "Collateralize.sol";
+import "GithubOraclize.sol";
 import "Repository.sol";
 
 contract DevBounty is GithubOraclize, Collateralize {
@@ -28,6 +28,8 @@ contract DevBounty is GithubOraclize, Collateralize {
   event MaintainerFailed(address claimant, string url);
 
   function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
+    OAR = OraclizeAddrResolverI(0x6f485c8bf6fc43ea212e93bbf8ce046c7f1cb475);
+
     minCollateral = _minCollateral;
     penaltyNum = _penaltyNum;
     penaltyDenom = _penaltyDenom;

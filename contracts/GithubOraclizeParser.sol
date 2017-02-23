@@ -6,7 +6,7 @@ library GithubOraclizeParser {
   using strings for *;
 
   function isValid(string self) returns (bool) {
-    return bytes(self).length == 0;
+    return bytes(self).length > 0;
   }
 
   function isFalse(string self) returns (bool) {
