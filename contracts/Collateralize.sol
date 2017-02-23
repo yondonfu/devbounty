@@ -1,11 +1,11 @@
 pragma solidity ^0.4.6;
 
 contract Collateralize {
-  mapping(address => uint) public collaterals;
-
   uint public minCollateral;
   uint public penaltyNum;
   uint public penaltyDenom;
+
+  mapping(address => uint) public collaterals;
 
   modifier requiresCollateral() {
     if (msg.value < minCollateral) throw;
@@ -13,15 +13,17 @@ contract Collateralize {
   }
 
   function withdrawCollateral() external {
-    uint collateral = collaterals[msg.sender];
+    address payee = msg.sender;
+
+    uint collateral = collaterals[payee];
 
     if (collateral == 0) throw;
     if (this.balance < collateral) throw;
 
-    collaterals[msg.sender] = 0;
+    collaterals[payee] = 0;
 
-    if (!msg.sender.send(collateral)) {
-      collaterals[msg.sender] = collateral;
+    if (!payee.send(collateral)) {
+      collaterals[payee] = collateral;
     }
   }
 

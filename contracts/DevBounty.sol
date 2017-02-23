@@ -8,7 +8,7 @@ import "Repository.sol";
 contract DevBounty is GithubOraclize, Collateralize {
   using strings for *;
 
-  struct RepositoryMetadata {
+  struct RepositoryMeta {
     uint minCollateral;
     uint penaltyNum;
     uint penaltyDenom;
@@ -22,7 +22,7 @@ contract DevBounty is GithubOraclize, Collateralize {
 
   // repository url => repository contract address
   mapping(string => address) repositories;
-  mapping(string => RepositoryMetadata) repositoryMetadataSet;
+  mapping(string => RepositoryMeta) repositoryMetadata;
 
   event MaintainerSuccess(address claimant, string url);
   event MaintainerFailed(address claimant, string url);
@@ -37,11 +37,11 @@ contract DevBounty is GithubOraclize, Collateralize {
   function registerRepository(string jsonHelper, string url, uint minCollateral, uint penaltyNum, uint penaltyDenom, uint maintainerFeeNum, uint maintainerFeeDenom, uint oraclizeGas) requiresCollateral payable {
     collaterals[msg.sender] = msg.value;
 
-    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, url, OraclizeQueryType.VerifyMaintainer); // Client provides constructed json helper - json(url)
-
+    // jsonHelper format: json(url).url
+    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, url, OraclizeQueryType.VerifyMaintainer);
     collaterals[msg.sender] -= oraclizeFee;
 
-    repositoryMetadataSet[url] = RepositoryMetadata(minCollateral, penaltyNum, penaltyDenom, maintainerFeeNum, maintainerFeeDenom, oraclizeGas, false);
+    repositoryMetadata[url] = RepositoryMeta(minCollateral, penaltyNum, penaltyDenom, maintainerFeeNum, maintainerFeeDenom, oraclizeGas, false);
   }
 
   /* Callbacks */
@@ -80,8 +80,8 @@ contract DevBounty is GithubOraclize, Collateralize {
   }
 
   function verifyMaintainerSuccessCallback(address claimant, string url, address[] maintainers) {
-    repositoryMetadataSet[url].initialized = true;
-    RepositoryMetadata memory meta = repositoryMetadataSet[url];
+    repositoryMetadata[url].initialized = true;
+    RepositoryMeta memory meta = repositoryMetadata[url];
 
     address repositoryAddr = address(new Repository(url, maintainers, meta.minCollateral, meta.penaltyNum, meta.penaltyDenom, meta.maintainerFeeNum, meta.maintainerFeeDenom, meta.oraclizeGas));
     repositories[url] = repositoryAddr;
@@ -93,7 +93,7 @@ contract DevBounty is GithubOraclize, Collateralize {
   function verifyMaintainerFailedCallback(address claimant, string url) {
     collaterals[claimant] -= calcPenalty(collaterals[claimant]);
 
-    delete repositoryMetadataSet[url];
+    delete repositoryMetadata[url];
 
     MaintainerFailed(claimant, url);
   }

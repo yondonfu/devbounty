@@ -28,7 +28,6 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
   string[] public issueUrls;
 
   mapping(address => bool) public maintainers;
-
   mapping(string => Issue) issues; // issue url => Issue
   mapping(string => PullRequest) activePullRequests; // pull request url => PullRequest
 
@@ -46,6 +45,11 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
 
   modifier issueExists(string issueUrl) {
     if (!issues[issueUrl].initialized) throw;
+    _;
+  }
+
+  modifier pullRequestExists(string prUrl) {
+    if (!activePullRequests[prUrl].initialized) throw;
     _;
   }
 
@@ -78,7 +82,7 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
     activePullRequests[url] = PullRequest(url, msg.sender, issues[issueUrl], false);
   }
 
-  function mergePullRequest(string jsonHelper, string url) onlyMaintainers requiresCollateral payable {
+  function mergePullRequest(string jsonHelper, string url) onlyMaintainers requiresCollateral pullRequestExists(url) payable {
     collaterals[msg.sender] = msg.value;
 
     // jsonHelper format: json(url).merged
@@ -124,7 +128,7 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
   }
 
   function verifyMergedPullRequestCallback(address claimant, string url, string result) internal {
-    if (!result.isValid() || !result.isFalse()) {
+    if (!result.isValid() || result.isFalse()) {
       verifyMergedPullRequestFailedCallback(claimant, url);
     } else {
       verifyMergedPullRequestSuccessCallback(claimant, url, result);
@@ -140,7 +144,7 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
   }
 
   function verifyOpenedPullRequestSuccessCallback(address claimant, string url, string result) internal {
-    if (result.checkPullRequest(claimant, activePullRequests[url].issue.url)) {
+    if (!result.checkPullRequest(claimant, activePullRequests[url].issue.url)) {
       verifyOpenedPullRequestFailedCallback(claimant, url);
     } else {
       activePullRequests[url].initialized = true;
@@ -158,20 +162,16 @@ contract Repository is GithubOraclize, Collateralize, ClaimableBounty {
   }
 
   function verifyMergedPullRequestSuccessCallback(address claimant, string url, string result) internal {
-    if (!activePullRequests[url].initialized) {
-      verifyMergedPullRequestFailedCallback(claimant, url);
-    } else {
-      uint bounty = activePullRequests[url].issue.bounty;
-      uint maintainerFee = calcMaintainerFee(bounty);
-      uint devBounty = bounty - maintainerFee;
+    uint bounty = activePullRequests[url].issue.bounty;
+    uint maintainerFee = calcMaintainerFee(bounty);
+    uint devBounty = bounty - maintainerFee;
 
-      claimableBounties[claimant] += maintainerFee;
-      claimableBounties[activePullRequests[url].owner] += devBounty;
+    claimableBounties[claimant] += maintainerFee;
+    claimableBounties[activePullRequests[url].owner] += devBounty;
 
-      delete activePullRequests[url];
+    delete activePullRequests[url];
 
-      MergedPullRequestSuccess(claimant, url, devBounty, maintainerFee);
-    }
+    MergedPullRequestSuccess(claimant, url, devBounty, maintainerFee);
   }
 
   function verifyMergedPullRequestFailedCallback(address claimant, string url) internal {
