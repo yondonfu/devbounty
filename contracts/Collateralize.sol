@@ -27,7 +27,9 @@ contract Collateralize {
     }
   }
 
-  function calcPenalty(uint amount) internal constant returns (uint) {
-    return (amount * penaltyNum) / penaltyDenom;
+  function penalize(address addr) internal {
+    uint penalty = (collaterals[addr] * penaltyNum) / penaltyDenom;
+
+    collaterals[addr] -= penalty;
   }
 }

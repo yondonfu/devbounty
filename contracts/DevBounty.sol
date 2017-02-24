@@ -3,29 +3,44 @@ pragma solidity ^0.4.6;
 import "strings.sol";
 import "Collateralize.sol";
 import "GithubOraclize.sol";
+import "GithubOraclizeParser.sol";
 import "Repository.sol";
 
 contract DevBounty is GithubOraclize, Collateralize {
   using strings for *;
-
-  struct RepositoryMeta {
-    uint minCollateral;
-    uint penaltyNum;
-    uint penaltyDenom;
-    uint maintainerFeeNum;
-    uint maintainerFeeDenom;
-    uint oraclizeGas;
-    bool initialized;
-  }
+  using GithubOraclizeParser for string;
+  using Repository for Repository.Repo;
 
   string[] public repositoryUrls;
 
-  // repository url => repository contract address
-  mapping(string => address) repositories;
-  mapping(string => RepositoryMeta) repositoryMetadata;
+  mapping(string => Repository.Repo) repositories;
 
-  event MaintainerSuccess(address claimant, string url);
-  event MaintainerFailed(address claimant, string url);
+  // EVENTS
+  event MaintainerSuccess(address claimant, string repoUrl, string apiUrl);
+  event MaintainerFailed(address claimant, string repoUrl, string apiUrl);
+  event IssueSuccess(address claimant, string repoUrl, string apiUrl);
+  event IssueFailed(address claimant, string repoUrl, string apiUrl);
+  event OpenedPullRequestSuccess(address claimant, string repoUrl, string apiUrl);
+  event OpenedPullRequestFailed(address claimant, string repoUrl, string apiUrl);
+  event MergedPullRequestSuccess(address claimant, string repoUrl, string apiUrl);
+  event MergedPullRequestFailed(address claimant, string repoUrl, string apiUrl);
+
+  // MODIFIERS
+
+  modifier onlyMaintainers(string repoUrl) {
+    if (!repositories[repoUrl].hasMaintainer(msg.sender)) throw;
+    _;
+  }
+
+  modifier repositoryExists(string repoUrl) {
+    if (!repositories[repoUrl].initialized) throw;
+    _;
+  }
+
+  modifier requiresRepoCollateral(string repoUrl) {
+    if (msg.value < repositories[repoUrl].minCollateral) throw;
+    _;
+  }
 
   function DevBounty(uint _minCollateral, uint _penaltyNum, uint _penaltyDenom, uint _oraclizeGas) {
     OAR = OraclizeAddrResolverI(0x6f485c8bf6fc43ea212e93bbf8ce046c7f1cb475);
@@ -36,30 +51,74 @@ contract DevBounty is GithubOraclize, Collateralize {
     oraclizeGas = _oraclizeGas;
   }
 
-  function registerRepository(string jsonHelper, string url, uint minCollateral, uint penaltyNum, uint penaltyDenom, uint maintainerFeeNum, uint maintainerFeeDenom, uint oraclizeGas) requiresCollateral payable {
-    collaterals[msg.sender] = msg.value;
+  // EXTERNAL
 
+  function registerRepository(string jsonHelper, string repoUrl, string proofUrl, uint minCollateral, uint penaltyNum, uint penaltyDenom, uint maintainerFeeNum, uint maintainerFeeDenom) requiresCollateral payable {
     // jsonHelper format: json(url).url
-    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, url, OraclizeQueryType.VerifyMaintainer);
-    collaterals[msg.sender] -= oraclizeFee;
+    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, repoUrl, proofUrl, OraclizeQueryType.VerifyMaintainer);
 
-    repositoryMetadata[url] = RepositoryMeta(minCollateral, penaltyNum, penaltyDenom, maintainerFeeNum, maintainerFeeDenom, oraclizeGas, false);
+    collaterals[msg.sender] += msg.value - oraclizeFee;
+
+    repositories[repoUrl].url = repoUrl;
+    repositories[repoUrl].minCollateral = minCollateral;
+    repositories[repoUrl].penaltyNum = penaltyNum;
+    repositories[repoUrl].penaltyDenom = penaltyDenom;
+    repositories[repoUrl].maintainerFeeNum = maintainerFeeNum;
+    repositories[repoUrl].maintainerFeeDenom = maintainerFeeDenom;
+    repositories[repoUrl].initialized = false;
   }
 
-  /* Callbacks */
+  function fundIssue(string jsonHelper, string repoUrl, string issueUrl) repositoryExists(repoUrl) payable {
+    if (!repositories[repoUrl].issueExists(issueUrl)) {
+      // jsonHelper format: json(url).url
+      uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, repoUrl, issueUrl, OraclizeQueryType.VerifyIssue);
+
+      repositories[repoUrl].createIssue(issueUrl, msg.value - oraclizeFee);
+    } else {
+      repositories[repoUrl].updateIssueBounty(issueUrl, msg.value);
+    }
+  }
+
+  function openPullRequest(string jsonHelper, string repoUrl, string prUrl, string issueUrl) repositoryExists(repoUrl) requiresRepoCollateral(repoUrl) payable {
+    if (!repositories[repoUrl].issueExists(issueUrl)) throw;
+
+    // jsonHelper format: json(url).[issue_url, body]
+    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, repoUrl, prUrl, OraclizeQueryType.VerifyOpenedPullRequest);
+
+    collaterals[msg.sender] += msg.value - oraclizeFee;
+
+    repositories[repoUrl].createPullRequest(prUrl, msg.sender, issueUrl);
+  }
+
+  function mergePullRequest(string jsonHelper, string repoUrl, string prUrl) repositoryExists(repoUrl) requiresRepoCollateral(repoUrl) onlyMaintainers(repoUrl) payable {
+    if (!repositories[repoUrl].pullRequestExists(prUrl)) throw;
+
+    // jsonHelper format: json(url).merged
+    uint oraclizeFee = sendOraclizeQuery(msg.sender, jsonHelper, repoUrl, prUrl, OraclizeQueryType.VerifyMergedPullRequest);
+
+    collaterals[msg.sender] += msg.value - oraclizeFee;
+  }
+
+  // CALLBACKS
 
   function __callback(bytes32 queryId, string result) onlyOraclize {
     OraclizeCallback memory c = oraclizeCallbacks[queryId];
 
     if (c.queryType == OraclizeQueryType.VerifyMaintainer) {
-      verifyMaintainerCallback(c.claimant, c.url, result);
+      verifyMaintainerCallback(c.claimant, c.repoUrl, c.apiUrl, result);
+    } else if (c.queryType == OraclizeQueryType.VerifyOpenedPullRequest) {
+      verifyOpenedPullRequestCallback(c.claimant, c.repoUrl, c.apiUrl, result);
+    } else if (c.queryType == OraclizeQueryType.VerifyMergedPullRequest) {
+      verifyMergedPullRequestCallback(c.claimant, c.repoUrl, c.apiUrl, result);
+    } else if (c.queryType == OraclizeQueryType.VerifyIssue) {
+      verifyIssueCallback(c.claimant, c.repoUrl, c.apiUrl, result);
     } else {
       // Unknown query
       throw;
     }
   }
 
-  function verifyMaintainerCallback(address claimant, string url, string result) internal {
+  function verifyMaintainerCallback(address claimant, string repoUrl, string proofUrl, string result) internal {
     /* Expect PROOF.md contents to be of the following form: */
     /* <addr>\n<addr>... */
     var contents = result.toSlice();
@@ -75,28 +134,84 @@ contract DevBounty is GithubOraclize, Collateralize {
     }
 
     if (!verified) {
-      verifyMaintainerFailedCallback(claimant, url);
+      penalize(claimant);
+
+      delete repositories[repoUrl];
+
+      MaintainerSuccess(claimant, repoUrl, proofUrl);
     } else {
-      verifyMaintainerSuccessCallback(claimant, url, maintainers);
+      repositories[repoUrl].initialized = true;
+
+      for (uint j = 0; j < maintainers.length; j++) {
+        repositories[repoUrl].maintainers[maintainers[j]] = true;
+      }
+
+      repositoryUrls.push(repoUrl);
+
+      MaintainerSuccess(claimant, repoUrl, proofUrl);
     }
   }
 
-  function verifyMaintainerSuccessCallback(address claimant, string url, address[] maintainers) {
-    repositoryMetadata[url].initialized = true;
-    RepositoryMeta memory meta = repositoryMetadata[url];
+  function verifyIssueCallback(address claimant, string repoUrl, string issueUrl, string result) internal {
+    if (!result.isValid()) {
+      repositories[repoUrl].deleteIssue(issueUrl);
 
-    address repositoryAddr = address(new Repository(url, maintainers, meta.minCollateral, meta.penaltyNum, meta.penaltyDenom, meta.maintainerFeeNum, meta.maintainerFeeDenom, meta.oraclizeGas));
-    repositories[url] = repositoryAddr;
-    repositoryUrls.push(url);
+      IssueFailed(claimant, repoUrl, issueUrl);
+    } else {
+      repositories[repoUrl].initIssue(issueUrl);
 
-    MaintainerSuccess(claimant, url);
+      IssueSuccess(claimant, repoUrl, issueUrl);
+    }
   }
 
-  function verifyMaintainerFailedCallback(address claimant, string url) {
-    collaterals[claimant] -= calcPenalty(collaterals[claimant]);
+  function verifyOpenedPullRequestCallback(address claimant, string repoUrl, string prUrl, string result) internal {
+    if (!result.isValid() || !result.checkPullRequest(claimant, prUrl)) {
+      penalize(claimant);
+      repositories[repoUrl].deletePullRequest(prUrl);
 
-    delete repositoryMetadata[url];
+      OpenedPullRequestFailed(claimant, repoUrl, prUrl);
+    } else {
+      repositories[repoUrl].initPullRequest(prUrl);
 
-    MaintainerFailed(claimant, url);
+      OpenedPullRequestSuccess(claimant, repoUrl, prUrl);
+    }
   }
+
+  function verifyMergedPullRequestCallback(address claimant, string repoUrl, string prUrl, string result) internal {
+    if (!result.isValid() || result.isFalse()) {
+      penalize(claimant);
+
+      MergedPullRequestFailed(claimant, repoUrl, prUrl);
+    } else {
+      repositories[repoUrl].computeBounties(claimant, prUrl);
+      repositories[repoUrl].deletePullRequest(prUrl);
+
+      MergedPullRequestSuccess(claimant, repoUrl, prUrl);
+    }
+  }
+
+  // UTILITY
+
+  function claimBounty(string repoUrl) external {
+    address payee = msg.sender;
+
+    uint bounty = repositories[repoUrl].claimableBounties[payee];
+
+    if (bounty == 0) throw;
+    if (this.balance < bounty) throw;
+
+    repositories[repoUrl].claimableBounties[payee] = 0;
+    if (!payee.send(bounty)) {
+      repositories[repoUrl].claimableBounties[payee] = bounty;
+    }
+  }
+
+  function addMaintainer(string repoUrl, address addr) onlyMaintainers(repoUrl) {
+    repositories[repoUrl].addMaintainer(addr);
+  }
+
+  function setMaintainerFee(string repoUrl, uint maintainerFeeNum, uint maintainerFeeDenom) onlyMaintainers(repoUrl) {
+    repositories[repoUrl].setMaintainerFee(maintainerFeeNum, maintainerFeeDenom);
+  }
+
 }
