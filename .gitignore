@@ -1,3 +1,5 @@
 *~
 node_modules
 build/*
+.truffle-solidity-loader
+dist
