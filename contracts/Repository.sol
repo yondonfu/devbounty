@@ -78,16 +78,16 @@ library Repository {
     return self.issueUrls.length;
   }
 
-  function getIssueByUrl(Repo storage self, string url) returns (string, uint, bool) {
-    return (self.issues[url].url, self.issues[url].bounty, self.issues[url].initialized);
+  function getIssueByUrl(Repo storage self, string url) returns (uint, bool) {
+    return (self.issues[url].bounty, self.issues[url].initialized);
   }
 
   function pullRequestExists(Repo storage self, string url) returns (bool) {
     return self.pullRequests[url].initialized;
   }
 
-  function getPullRequestByUrl(Repo storage self, string url) returns (string, string) {
-    return (self.pullRequests[url].url, self.pullRequests[url].issue.url);
+  function getPullRequestByUrl(Repo storage self, string url) returns (address, string, bool) {
+    return (self.pullRequests[url].owner, self.pullRequests[url].issue.url, self.pullRequests[url].initialized);
   }
 
   function hasMaintainer(Repo storage self, address addr) returns (bool) {

@@ -18,7 +18,7 @@ contract DevBounty is GithubOraclize, Collateralize {
   // EVENTS
   event MaintainerSuccess(address claimant, string repoUrl, string apiUrl);
   event MaintainerFailed(address claimant, string repoUrl, string apiUrl);
-  event IssueSuccess(address claimant, string repoUrl, string apiUrl);
+  event IssueSuccess(address claimant, string repoUrl, string apiUrl, uint bounty);
   event IssueFailed(address claimant, string repoUrl, string apiUrl);
   event OpenedPullRequestSuccess(address claimant, string repoUrl, string apiUrl);
   event OpenedPullRequestFailed(address claimant, string repoUrl, string apiUrl);
@@ -160,12 +160,12 @@ contract DevBounty is GithubOraclize, Collateralize {
     } else {
       repositories[repoUrl].initIssue(issueUrl);
 
-      IssueSuccess(claimant, repoUrl, issueUrl);
+      IssueSuccess(claimant, repoUrl, issueUrl, repositories[repoUrl].issues[issueUrl].bounty);
     }
   }
 
   function verifyOpenedPullRequestCallback(address claimant, string repoUrl, string prUrl, string result) internal {
-    if (!result.isValid() || !result.checkPullRequest(claimant, prUrl)) {
+    if (!result.isValid() || !result.checkPullRequest(claimant, repositories[repoUrl].pullRequests[prUrl].issue.url)) {
       penalize(claimant);
       repositories[repoUrl].deletePullRequest(prUrl);
 
@@ -212,6 +212,14 @@ contract DevBounty is GithubOraclize, Collateralize {
 
   function setMaintainerFee(string repoUrl, uint maintainerFeeNum, uint maintainerFeeDenom) onlyMaintainers(repoUrl) {
     repositories[repoUrl].setMaintainerFee(maintainerFeeNum, maintainerFeeDenom);
+  }
+
+  function getIssueByUrl(string repoUrl, string issueUrl) public constant returns (uint, bool) {
+    return repositories[repoUrl].getIssueByUrl(issueUrl);
+  }
+
+  function getPullRequestByUrl(string repoUrl, string prUrl) public constant returns (address, string, bool) {
+    return (repositories[repoUrl].pullRequests[prUrl].owner, repositories[repoUrl].pullRequests[prUrl].issue.url, repositories[repoUrl].pullRequests[prUrl].initialized);
   }
 
 }
